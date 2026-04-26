@@ -3,7 +3,19 @@ import SwiftData
 
 @main
 struct TempoApp: App {
-    var sharedModelContainer: ModelContainer = {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+    var body: some Scene {
+        Settings {
+            EmptyView()
+        }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var statusBarController: StatusBarController?
+
+    private var modelContainer: ModelContainer = {
         let schema = Schema([TodoTask.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
@@ -13,18 +25,8 @@ struct TempoApp: App {
         }
     }()
 
-    init() {
+    func applicationDidFinishLaunching(_ notification: Notification) {
         NotificationManager.shared.setup()
-    }
-
-    var body: some Scene {
-        MenuBarExtra {
-            MenuContentView()
-                .modelContainer(sharedModelContainer)
-        } label: {
-            MenuBarLabel()
-                .modelContainer(sharedModelContainer)
-        }
-        .menuBarExtraStyle(.window)
+        statusBarController = StatusBarController(modelContainer: modelContainer)
     }
 }

@@ -3,7 +3,6 @@ import SwiftData
 
 struct MenuContentView: View {
     @Environment(\.modelContext) private var modelContext
-
     @Query(
         filter: #Predicate<TodoTask> { $0.needsCarryOverDecision == true }
     ) private var carryOverTasks: [TodoTask]
@@ -16,7 +15,6 @@ struct MenuContentView: View {
     @State private var selectedTaskId: UUID?
     @State private var editingTaskId: UUID?
     @State private var selectedDate = Calendar.current.startOfDay(for: .now)
-    @State private var hasCheckedCarryOver = false
     @State private var dragState = DragState()
 
     var body: some View {
@@ -30,10 +28,7 @@ struct MenuContentView: View {
         .frame(width: 360)
         .frame(minHeight: 480, maxHeight: 700)
         .onAppear {
-            if !hasCheckedCarryOver {
-                TaskService.checkCarryOver(context: modelContext)
-                hasCheckedCarryOver = true
-            }
+            TaskService.checkCarryOver(context: modelContext)
             setupNotificationHandlers()
         }
     }
@@ -83,6 +78,11 @@ struct MenuContentView: View {
                 if flattenedTasks.isEmpty {
                     emptyState
                 }
+
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedTaskId = nil }
             }
             .onPreferenceChange(RowFramePreference.self) { frames in
                 for (id, frame) in frames {

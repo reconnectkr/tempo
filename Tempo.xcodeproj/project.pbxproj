@@ -17,7 +17,9 @@
 		782C68FA007C802DA5C6E2E8 /* MenuBarLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B41A8A496769984C16F6187 /* MenuBarLabel.swift */; };
 		78D431FC734932DC2397F4AB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 19BD6B0F4B6E8C72E51A9764 /* Assets.xcassets */; };
 		7BDF3C1515001127EA7BAFEF /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D16D5886BBADDDE3EF6923DC /* NotificationManager.swift */; };
+		8923F7801F2DED72586F94A9 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F8AD535EBB5E850B28F012 /* AboutView.swift */; };
 		A03A14D54316E5C4BA64D49F /* TodoTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB420C4F8FA6CD65C40F4CD0 /* TodoTask.swift */; };
+		CA233CBE7F4455308C89D79B /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4395E5715D349B4AFE0FDDB5 /* StatusBarController.swift */; };
 		D36AB93C77028EC525153FF4 /* TimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 274E228A75DFAA026D96512D /* TimerManager.swift */; };
 		D5B44621312530E860B4D400 /* TaskService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0B0BC89B2BB014E7043B6C /* TaskService.swift */; };
 		DAEE893F0621D3AE08D2BCA3 /* MenuContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0AC288B47ED4D74D7346E7E /* MenuContentView.swift */; };
@@ -31,7 +33,9 @@
 		2203F65EE7F7D28718ED083D /* HeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
 		270B87214C8958180521CF6C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		274E228A75DFAA026D96512D /* TimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerManager.swift; sourceTree = "<group>"; };
+		4395E5715D349B4AFE0FDDB5 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		87E70BF6EE8FE5C97BAA2D3E /* DragState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragState.swift; sourceTree = "<group>"; };
+		90F8AD535EBB5E850B28F012 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		9B41A8A496769984C16F6187 /* MenuBarLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabel.swift; sourceTree = "<group>"; };
 		AE6263597B3354C508BBC7D4 /* Tempo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tempo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0B0BC89B2BB014E7043B6C /* TaskService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskService.swift; sourceTree = "<group>"; };
@@ -49,6 +53,7 @@
 			children = (
 				87E70BF6EE8FE5C97BAA2D3E /* DragState.swift */,
 				D16D5886BBADDDE3EF6923DC /* NotificationManager.swift */,
+				4395E5715D349B4AFE0FDDB5 /* StatusBarController.swift */,
 				BB0B0BC89B2BB014E7043B6C /* TaskService.swift */,
 				274E228A75DFAA026D96512D /* TimerManager.swift */,
 			);
@@ -96,6 +101,7 @@
 		DBAD0BDBDA5FA9B5AA68E493 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				90F8AD535EBB5E850B28F012 /* AboutView.swift */,
 				109CAED1D82A4C6F28D7630C /* CalendarPickerView.swift */,
 				06AABE72CD25B05DE8CC3E77 /* CarryOverView.swift */,
 				2203F65EE7F7D28718ED083D /* HeaderView.swift */,
@@ -174,6 +180,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8923F7801F2DED72586F94A9 /* AboutView.swift in Sources */,
 				5B63DB23A4BD12A0D9CBB010 /* CalendarPickerView.swift in Sources */,
 				13E99D75CA1AC62DC4BB4257 /* CarryOverView.swift in Sources */,
 				772AC2B2FE92635DEC46E68A /* DragState.swift in Sources */,
@@ -181,6 +188,7 @@
 				782C68FA007C802DA5C6E2E8 /* MenuBarLabel.swift in Sources */,
 				DAEE893F0621D3AE08D2BCA3 /* MenuContentView.swift in Sources */,
 				7BDF3C1515001127EA7BAFEF /* NotificationManager.swift in Sources */,
+				CA233CBE7F4455308C89D79B /* StatusBarController.swift in Sources */,
 				0B66011609E7165338AE3A05 /* TaskInputView.swift in Sources */,
 				37AABBF9930A6E14268624FF /* TaskRowView.swift in Sources */,
 				D5B44621312530E860B4D400 /* TaskService.swift in Sources */,
