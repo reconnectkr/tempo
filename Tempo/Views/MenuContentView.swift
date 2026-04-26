@@ -27,6 +27,10 @@ struct MenuContentView: View {
         }
         .frame(width: 360)
         .frame(minHeight: 480, maxHeight: 700)
+        .onKeyPress(.escape) {
+            NSApp.keyWindow?.close()
+            return .handled
+        }
         .onAppear {
             TaskService.checkCarryOver(context: modelContext)
             setupNotificationHandlers()
