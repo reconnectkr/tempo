@@ -15,6 +15,7 @@ struct MenuContentView: View {
     @State private var selectedTaskId: UUID?
     @State private var editingTaskId: UUID?
     @State private var selectedDate = Calendar.current.startOfDay(for: .now)
+    @State private var currentDayStart = Calendar.current.startOfDay(for: .now)
     @State private var dragState = DragState()
 
     var body: some View {
@@ -32,9 +33,21 @@ struct MenuContentView: View {
             return .handled
         }
         .onAppear {
-            TaskService.checkCarryOver(context: modelContext)
+            handleDayChangeIfNeeded()
             setupNotificationHandlers()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            handleDayChangeIfNeeded()
+        }
+    }
+
+    private func handleDayChangeIfNeeded() {
+        let newDayStart = Calendar.current.startOfDay(for: .now)
+        if selectedDate == currentDayStart {
+            selectedDate = newDayStart
+        }
+        currentDayStart = newDayStart
+        TaskService.checkCarryOver(context: modelContext)
     }
 
     private var mainView: some View {

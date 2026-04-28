@@ -59,13 +59,14 @@ struct TaskRowView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { onSelect() }
 
-                if task.daysActive >= 3, task.status != .completed {
-                    Text("\(task.daysActive)일째")
+                if task.daysActive >= 2, task.status != .completed {
+                    Text("O-\(task.daysActive - 1)")
                         .font(.caption2)
+                        .monospacedDigit()
                         .foregroundStyle(.orange)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 3))
+                        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
                 }
 
                 timerSection
