@@ -12,7 +12,7 @@ struct TaskInputView: View {
 
     @State private var inputText = ""
     @State private var durationMinutes = ""
-    @FocusState private var isInputFocused: Bool
+    @FocusState.Binding var isInputFocused: Bool
 
     private var isEditing: Bool { editingTask != nil }
 

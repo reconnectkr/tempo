@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
 struct MenuContentView: View {
     @Environment(\.modelContext) private var modelContext
@@ -18,6 +19,8 @@ struct MenuContentView: View {
     @State private var currentDayStart = Calendar.current.startOfDay(for: .now)
     @State private var dragState = DragState()
     @State private var scrollTargetId: UUID?
+    @State private var keyMonitor: Any?
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         Group {
@@ -36,9 +39,39 @@ struct MenuContentView: View {
         .onAppear {
             handleDayChangeIfNeeded()
             setupNotificationHandlers()
+            installKeyMonitor()
+        }
+        .onDisappear {
+            removeKeyMonitor()
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             handleDayChangeIfNeeded()
+        }
+    }
+
+    // 메뉴바 popover에서 Backspace로 선택 항목 삭제.
+    // .onKeyPress / .onDeleteCommand 는 SwiftUI 포커스 의존이라 신뢰성 부족.
+    // NSEvent local monitor로 keyDown을 직접 받음.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // keyCode 51 = Delete(Backspace)
+            guard event.keyCode == 51 else { return event }
+            // 입력창에 포커스가 있으면 텍스트 편집을 우선.
+            guard !self.isInputFocused else { return event }
+            guard let id = self.selectedTaskId, let task = self.findTask(by: id) else { return event }
+            withAnimation {
+                TaskService.deleteTask(task, context: self.modelContext)
+            }
+            self.selectedTaskId = nil
+            return nil // 이벤트 소비
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
         }
     }
 
@@ -67,7 +100,8 @@ struct MenuContentView: View {
                 assignedDate: selectedDate,
                 onClearSelection: { selectedTaskId = nil },
                 onFinishEditing: { editingTaskId = nil },
-                onTaskCreated: { newId in scrollTargetId = newId }
+                onTaskCreated: { newId in scrollTargetId = newId },
+                isInputFocused: $isInputFocused
             )
             .padding(.vertical, 4)
         }
@@ -82,6 +116,8 @@ struct MenuContentView: View {
                             task: task,
                             isSelected: selectedTaskId == task.id,
                             onSelect: {
+                                // 행 선택 시 입력창 포커스 해제 → Backspace로 항목 삭제 가능.
+                                isInputFocused = false
                                 if selectedTaskId == task.id {
                                     selectedTaskId = nil
                                 } else {
