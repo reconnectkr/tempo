@@ -17,6 +17,7 @@ struct MenuContentView: View {
     @State private var selectedDate = Calendar.current.startOfDay(for: .now)
     @State private var currentDayStart = Calendar.current.startOfDay(for: .now)
     @State private var dragState = DragState()
+    @State private var scrollTargetId: UUID?
 
     var body: some View {
         Group {
@@ -65,50 +66,65 @@ struct MenuContentView: View {
                 editingTask: editingTask,
                 assignedDate: selectedDate,
                 onClearSelection: { selectedTaskId = nil },
-                onFinishEditing: { editingTaskId = nil }
+                onFinishEditing: { editingTaskId = nil },
+                onTaskCreated: { newId in scrollTargetId = newId }
             )
             .padding(.vertical, 4)
         }
     }
 
     private var taskList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(flattenedTasks, id: \.id) { task in
-                    TaskRowView(
-                        task: task,
-                        isSelected: selectedTaskId == task.id,
-                        onSelect: {
-                            if selectedTaskId == task.id {
-                                selectedTaskId = nil
-                            } else {
-                                selectedTaskId = task.id
-                            }
-                        },
-                        dragState: dragState
-                    )
-                    .contextMenu {
-                        taskContextMenu(task)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(flattenedTasks, id: \.id) { task in
+                        TaskRowView(
+                            task: task,
+                            isSelected: selectedTaskId == task.id,
+                            onSelect: {
+                                if selectedTaskId == task.id {
+                                    selectedTaskId = nil
+                                } else {
+                                    selectedTaskId = task.id
+                                }
+                            },
+                            dragState: dragState
+                        )
+                        .id(task.id)
+                        .contextMenu {
+                            taskContextMenu(task)
+                        }
+                    }
+
+                    if flattenedTasks.isEmpty {
+                        emptyState
+                    }
+
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectedTaskId = nil }
+                }
+                .onPreferenceChange(RowFramePreference.self) { frames in
+                    for (id, frame) in frames {
+                        dragState.registerFrame(id, frame: frame)
                     }
                 }
-
-                if flattenedTasks.isEmpty {
-                    emptyState
-                }
-
-                Color.clear
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedTaskId = nil }
             }
-            .onPreferenceChange(RowFramePreference.self) { frames in
-                for (id, frame) in frames {
-                    dragState.registerFrame(id, frame: frame)
+            .coordinateSpace(name: "taskList")
+            .frame(minHeight: 80)
+            .onChange(of: scrollTargetId) { _, newValue in
+                guard let id = newValue else { return }
+                // SwiftData @Query 갱신 후 새 행이 LazyVStack에 등장한 다음 스크롤되도록 다음 frame으로 미룸.
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                    scrollTargetId = nil
                 }
             }
         }
-        .coordinateSpace(name: "taskList")
-        .frame(minHeight: 80)
     }
 
     @ViewBuilder

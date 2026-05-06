@@ -8,6 +8,7 @@ struct TaskInputView: View {
     let assignedDate: Date
     let onClearSelection: () -> Void
     let onFinishEditing: () -> Void
+    var onTaskCreated: (UUID) -> Void = { _ in }
 
     @State private var inputText = ""
     @State private var durationMinutes = ""
@@ -33,15 +34,7 @@ struct TaskInputView: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
-                Text(modeLabel)
-                    .font(.caption2)
-                    .foregroundStyle(modeLabelIsAccent ? Color.accentColor : .secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(modeLabelIsAccent ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.12))
-                    )
+                modeLabelView
 
                 TextField("새 할 일", text: $inputText)
                     .textFieldStyle(.plain)
@@ -86,6 +79,14 @@ struct TaskInputView: View {
             }
             return .handled
         }
+        .onKeyPress(.tab) {
+            // 하위 모드에서 Tab → 선택 해제 → 메인 모드.
+            if !isEditing, selectedTask != nil {
+                onClearSelection()
+                return .handled
+            }
+            return .ignored
+        }
         .onChange(of: editingTask?.id) {
             if let task = editingTask {
                 inputText = task.title
@@ -96,6 +97,31 @@ struct TaskInputView: View {
                 }
                 isInputFocused = true
             }
+        }
+    }
+
+    @ViewBuilder
+    private var modeLabelView: some View {
+        let label = Text(modeLabel)
+            .font(.caption2)
+            .foregroundStyle(modeLabelIsAccent ? Color.accentColor : .secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(modeLabelIsAccent ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.12))
+            )
+
+        // 하위 라벨 누르면 선택 해제 → 메인 모드로 전환.
+        // 수정 모드와 메인 모드에서는 토글 동작 없음.
+        if !isEditing, selectedTask != nil {
+            Button(action: { onClearSelection() }) {
+                label
+            }
+            .buttonStyle(.plain)
+            .help("클릭하면 메인으로 전환")
+        } else {
+            label
         }
     }
 
@@ -120,13 +146,14 @@ struct TaskInputView: View {
             }
             onFinishEditing()
         } else {
-            TaskService.createTask(
+            let created = TaskService.createTask(
                 title: trimmed,
                 parent: selectedTask,
                 assignedDate: assignedDate,
                 plannedDuration: duration,
                 context: modelContext
             )
+            onTaskCreated(created.id)
         }
 
         inputText = ""

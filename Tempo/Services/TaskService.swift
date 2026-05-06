@@ -6,13 +6,14 @@ struct TaskService {
 
     // MARK: - 생성
 
+    @discardableResult
     static func createTask(
         title: String,
         parent: TodoTask?,
         assignedDate: Date = .now,
         plannedDuration: TimeInterval?,
         context: ModelContext
-    ) {
+    ) -> TodoTask {
         let siblings: [TodoTask]
         if let parent {
             siblings = parent.children
@@ -33,6 +34,7 @@ struct TaskService {
         )
         context.insert(task)
         try? context.save()
+        return task
     }
 
     // MARK: - 완료
