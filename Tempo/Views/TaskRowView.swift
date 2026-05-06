@@ -6,6 +6,7 @@ struct TaskRowView: View {
     @Bindable var task: TodoTask
     let isSelected: Bool
     let onSelect: () -> Void
+    let onEdit: () -> Void
     var dragState: DragState
 
     @State private var now = Date()
@@ -57,6 +58,8 @@ struct TaskRowView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
+                    // 더블 탭이 single 탭보다 먼저 와야 SwiftUI가 두 제스처를 분리함.
+                    .onTapGesture(count: 2) { onEdit() }
                     .onTapGesture { onSelect() }
                     .gesture(
                         DragGesture(minimumDistance: 5, coordinateSpace: .named("taskList"))

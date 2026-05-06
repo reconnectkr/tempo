@@ -124,6 +124,9 @@ struct MenuContentView: View {
                                     selectedTaskId = task.id
                                 }
                             },
+                            onEdit: {
+                                editingTaskId = task.id
+                            },
                             dragState: dragState
                         )
                         .id(task.id)
