@@ -14,7 +14,6 @@ struct MenuContentView: View {
     ) private var allRootTasks: [TodoTask]
 
     @State private var selectedTaskId: UUID?
-    @State private var editingTaskId: UUID?
     @State private var selectedDate = Calendar.current.startOfDay(for: .now)
     @State private var currentDayStart = Calendar.current.startOfDay(for: .now)
     @State private var dragState = DragState()
@@ -96,10 +95,8 @@ struct MenuContentView: View {
 
             TaskInputView(
                 selectedTask: selectedTask,
-                editingTask: editingTask,
                 assignedDate: selectedDate,
                 onClearSelection: { selectedTaskId = nil },
-                onFinishEditing: { editingTaskId = nil },
                 onTaskCreated: { newId in scrollTargetId = newId },
                 isInputFocused: $isInputFocused
             )
@@ -123,9 +120,6 @@ struct MenuContentView: View {
                                 } else {
                                     selectedTaskId = task.id
                                 }
-                            },
-                            onEdit: {
-                                editingTaskId = task.id
                             },
                             dragState: dragState
                         )
@@ -182,10 +176,6 @@ struct MenuContentView: View {
 
     @ViewBuilder
     private func taskContextMenu(_ task: TodoTask) -> some View {
-        Button("수정") {
-            editingTaskId = task.id
-        }
-
         // 타이머 미실행 + 미완료 항목에 대해 수동 진행 토글.
         if task.status != .completed, !task.isTimerRunning {
             Button(task.status == .inProgress ? "진행 중지" : "진행 시작") {
@@ -211,11 +201,6 @@ struct MenuContentView: View {
 
     private var selectedTask: TodoTask? {
         guard let id = selectedTaskId else { return nil }
-        return findTask(by: id)
-    }
-
-    private var editingTask: TodoTask? {
-        guard let id = editingTaskId else { return nil }
         return findTask(by: id)
     }
 
