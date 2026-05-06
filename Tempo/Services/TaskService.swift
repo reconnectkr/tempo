@@ -50,6 +50,21 @@ struct TaskService {
         try? context.save()
     }
 
+    // 타이머가 돌고 있지 않을 때 진행/대기 상태 토글.
+    // 타이머 실행 중에는 타이머가 상태를 관리하므로 호출 효과 없음.
+    static func toggleInProgress(_ task: TodoTask, context: ModelContext) {
+        guard !task.isTimerRunning else { return }
+        switch task.status {
+        case .pending:
+            task.status = .inProgress
+        case .inProgress:
+            task.status = .pending
+        case .completed:
+            return
+        }
+        try? context.save()
+    }
+
     // MARK: - 삭제
 
     static func deleteTask(_ task: TodoTask, context: ModelContext) {

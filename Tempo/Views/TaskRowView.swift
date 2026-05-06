@@ -133,16 +133,28 @@ struct TaskRowView: View {
     }
 
     private var rowBackground: some View {
-        Group {
-            if dropState == .child {
-                Color.accentColor.opacity(0.2)
-            } else if dropState == .invalid {
-                Color.red.opacity(0.08)
-            } else if isSelected {
-                Color.accentColor.opacity(0.1)
-            } else {
-                Color.clear
+        ZStack(alignment: .leading) {
+            // 1. 베이스 색 레이어: drop, selection 등.
+            Group {
+                if dropState == .child {
+                    Color.accentColor.opacity(0.2)
+                } else if dropState == .invalid {
+                    Color.red.opacity(0.08)
+                } else if isSelected {
+                    Color.accentColor.opacity(0.1)
+                } else {
+                    Color.clear
+                }
             }
+
+            // 2. 진행 중 워터마크: 행 가로 중앙에 흐린 텍스트.
+            if task.status == .inProgress {
+                Text("진행중")
+                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Color.accentColor.opacity(0.22))
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
         }
     }
 

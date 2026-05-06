@@ -131,6 +131,13 @@ struct MenuContentView: View {
             editingTaskId = task.id
         }
 
+        // 타이머 미실행 + 미완료 항목에 대해 수동 진행 토글.
+        if task.status != .completed, !task.isTimerRunning {
+            Button(task.status == .inProgress ? "진행 중지" : "진행 시작") {
+                TaskService.toggleInProgress(task, context: modelContext)
+            }
+        }
+
         if task.plannedDuration != nil {
             Menu("시간 변경") {
                 Button("15분") { TaskService.updatePlannedDuration(task, duration: 15 * 60, context: modelContext) }
@@ -167,7 +174,8 @@ struct MenuContentView: View {
     private var rootTasks: [TodoTask] {
         let dayStart = Calendar.current.startOfDay(for: selectedDate)
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)!
-        return allRootTasks.filter { $0.assignedDate >= dayStart && $0.assignedDate < dayEnd }
+        let filtered = allRootTasks.filter { $0.assignedDate >= dayStart && $0.assignedDate < dayEnd }
+        return filtered.sorted(by: orderedByActive)
     }
 
     private var flattenedTasks: [TodoTask] {
@@ -180,9 +188,24 @@ struct MenuContentView: View {
 
     private func flatten(_ task: TodoTask, into list: inout [TodoTask]) {
         list.append(task)
+        // 트리 내부는 sortOrder만으로 정렬(원래 순서 유지).
         for child in task.sortedChildren {
             flatten(child, into: &list)
         }
+    }
+
+    // 진행 중(또는 진행 중 후손을 가진 트리)을 같은 레벨에서 위로 올림.
+    // 같은 활성 상태 안에서는 기존 sortOrder 유지.
+    private func orderedByActive(_ a: TodoTask, _ b: TodoTask) -> Bool {
+        let aActive = subtreeContainsInProgress(a)
+        let bActive = subtreeContainsInProgress(b)
+        if aActive != bActive { return aActive }
+        return a.sortOrder < b.sortOrder
+    }
+
+    private func subtreeContainsInProgress(_ task: TodoTask) -> Bool {
+        if task.status == .inProgress { return true }
+        return task.children.contains { subtreeContainsInProgress($0) }
     }
 
     private func setupNotificationHandlers() {
