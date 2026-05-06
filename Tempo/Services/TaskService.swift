@@ -204,11 +204,33 @@ struct TaskService {
             newSortOrder = (target.children.map(\.sortOrder).max() ?? -1) + 1
         }
 
+        // 트리는 같은 assignedDate를 공유함.
+        // source가 들어갈 destination tree의 날짜를 mutation 전에 미리 캡처.
+        // (siblingAbove/Below of a root처럼 source가 root로 승격될 때
+        //  source.parent가 nil이 되어 rootOf(source)가 자기 자신이 되는 함정 회피)
+        let destinationRootDate = rootOf(target).assignedDate
+
         source.parent = newParent
         source.sortOrder = newSortOrder
         recalculateDepth(source)
+        applyAssignedDate(destinationRootDate, to: source)
 
         try? context.save()
+    }
+
+    private static func rootOf(_ task: TodoTask) -> TodoTask {
+        var current = task
+        while let parent = current.parent {
+            current = parent
+        }
+        return current
+    }
+
+    private static func applyAssignedDate(_ date: Date, to task: TodoTask) {
+        task.assignedDate = date
+        for child in task.children {
+            applyAssignedDate(date, to: child)
+        }
     }
 
     // MARK: - 유틸리티
