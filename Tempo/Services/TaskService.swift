@@ -48,8 +48,23 @@ struct TaskService {
             task.completedAt = .now
             stopTimer(task, context: context)
             NSSound(named: "Glass")?.play()
+            propagateCompletionUpward(from: task, context: context)
         }
         try? context.save()
+    }
+
+    // 하위 항목이 모두 완료되면 부모도 자동 완료. 루트까지 재귀 전파.
+    // 자식이 없는 부모는 영향 없음(자기 상태 유지).
+    private static func propagateCompletionUpward(from task: TodoTask, context: ModelContext) {
+        guard let parent = task.parent else { return }
+        guard !parent.children.isEmpty else { return }
+        guard parent.status != .completed else { return }
+        guard parent.children.allSatisfy({ $0.status == .completed }) else { return }
+
+        parent.status = .completed
+        parent.completedAt = .now
+        stopTimer(parent, context: context)
+        propagateCompletionUpward(from: parent, context: context)
     }
 
     // 타이머가 돌고 있지 않을 때 진행/대기 상태 토글.
