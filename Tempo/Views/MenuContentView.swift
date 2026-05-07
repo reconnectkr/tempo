@@ -49,22 +49,31 @@ struct MenuContentView: View {
         }
     }
 
-    // 메뉴바 popover에서 Backspace로 선택 항목 삭제.
+    // 메뉴바 popover에서 키보드 단축키 처리.
     // .onKeyPress / .onDeleteCommand 는 SwiftUI 포커스 의존이라 신뢰성 부족.
     // NSEvent local monitor로 keyDown을 직접 받음.
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // keyCode 51 = Delete(Backspace)
-            guard event.keyCode == 51 else { return event }
-            // 입력창에 포커스가 있으면 텍스트 편집을 우선.
-            guard !self.isInputFocused else { return event }
+            // 입력창에 포커스가 있거나 수정 모드면 텍스트 편집을 우선.
+            guard !self.isInputFocused, self.editingTaskId == nil else { return event }
             guard let id = self.selectedTaskId, let task = self.findTask(by: id) else { return event }
-            withAnimation {
-                TaskService.deleteTask(task, context: self.modelContext)
+
+            switch event.keyCode {
+            case 51: // Delete(Backspace) → 항목 삭제
+                withAnimation {
+                    TaskService.deleteTask(task, context: self.modelContext)
+                }
+                self.selectedTaskId = nil
+                return nil
+            case 49: // Space → 진행/대기 토글
+                withAnimation {
+                    TaskService.toggleInProgress(task, context: self.modelContext)
+                }
+                return nil
+            default:
+                return event
             }
-            self.selectedTaskId = nil
-            return nil // 이벤트 소비
         }
     }
 
