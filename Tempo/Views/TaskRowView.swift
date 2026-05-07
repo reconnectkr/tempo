@@ -57,10 +57,7 @@ struct TaskRowView: View {
                     .foregroundStyle(task.status == .completed ? .secondary : .primary)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    // 더블 탭이 single 탭보다 먼저 와야 SwiftUI가 두 제스처를 분리함.
-                    .onTapGesture(count: 2) { onEdit() }
-                    .onTapGesture { onSelect() }
+                    // 드래그 제스처는 제목 영역에만 부착(체크박스/타이머 버튼과 충돌 방지).
                     .gesture(
                         DragGesture(minimumDistance: 5, coordinateSpace: .named("taskList"))
                             .onChanged { value in
@@ -93,6 +90,12 @@ struct TaskRowView: View {
             .padding(.horizontal, 12)
             .background(rowBackground)
             .contentShape(Rectangle())
+            // 행 어디든 클릭 가능. Button(체크박스/타이머)은 자체 hit-test가 우선이라 영향 없음.
+            // 더블 클릭 대기 지연 회피를 위해 single은 즉시, double은 simultaneousGesture.
+            .onTapGesture { onSelect() }
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded { onEdit() }
+            )
             .background(
                 GeometryReader { geo in
                     Color.clear
