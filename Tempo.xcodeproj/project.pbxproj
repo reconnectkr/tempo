@@ -18,6 +18,7 @@
 		78D431FC734932DC2397F4AB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 19BD6B0F4B6E8C72E51A9764 /* Assets.xcassets */; };
 		7BDF3C1515001127EA7BAFEF /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D16D5886BBADDDE3EF6923DC /* NotificationManager.swift */; };
 		8923F7801F2DED72586F94A9 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F8AD535EBB5E850B28F012 /* AboutView.swift */; };
+		95AD493D5AD90E55037A7B41 /* AppCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 056CBB50A6F5A50D612C0FA4 /* AppCalendar.swift */; };
 		A03A14D54316E5C4BA64D49F /* TodoTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB420C4F8FA6CD65C40F4CD0 /* TodoTask.swift */; };
 		CA233CBE7F4455308C89D79B /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4395E5715D349B4AFE0FDDB5 /* StatusBarController.swift */; };
 		D36AB93C77028EC525153FF4 /* TimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 274E228A75DFAA026D96512D /* TimerManager.swift */; };
@@ -26,6 +27,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		056CBB50A6F5A50D612C0FA4 /* AppCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCalendar.swift; sourceTree = "<group>"; };
 		06AABE72CD25B05DE8CC3E77 /* CarryOverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarryOverView.swift; sourceTree = "<group>"; };
 		109CAED1D82A4C6F28D7630C /* CalendarPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPickerView.swift; sourceTree = "<group>"; };
 		14CD3CC4493B5F3587FCCAA8 /* TaskRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRowView.swift; sourceTree = "<group>"; };
@@ -51,6 +53,7 @@
 		0271089951DC7FF9C0B35A81 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				056CBB50A6F5A50D612C0FA4 /* AppCalendar.swift */,
 				87E70BF6EE8FE5C97BAA2D3E /* DragState.swift */,
 				D16D5886BBADDDE3EF6923DC /* NotificationManager.swift */,
 				4395E5715D349B4AFE0FDDB5 /* StatusBarController.swift */,
@@ -181,6 +184,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8923F7801F2DED72586F94A9 /* AboutView.swift in Sources */,
+				95AD493D5AD90E55037A7B41 /* AppCalendar.swift in Sources */,
 				5B63DB23A4BD12A0D9CBB010 /* CalendarPickerView.swift in Sources */,
 				13E99D75CA1AC62DC4BB4257 /* CarryOverView.swift in Sources */,
 				772AC2B2FE92635DEC46E68A /* DragState.swift in Sources */,
