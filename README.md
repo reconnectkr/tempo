@@ -112,11 +112,17 @@ open /Applications/Tempo.app
 - ← / → → 루트(메인) 항목 사이만 이동, 양 끝에서 순환
 - 선택 없을 때 ↓ → 첫 루트 / ↑ → 마지막 루트
 - Enter → 선택 항목 완료/미완료 토글 (`TaskService.toggleComplete`)
-- 방향키는 입력창 포커스/수정 모드와 무관하게 항상 동작 (타이핑 중에도 선택만 이동, 입력 포커스 유지)
-- 그 외 단축키(Backspace/Space/Enter)는 입력 중에는 텍스트 편집 우선
+- 입력창 포커스 또는 수정 모드일 때는 모든 단축키(방향키/Backspace/Space/Enter) 비활성 — 텍스트 커서 이동·편집 우선
 
 #### 개발 편의
 - `scripts/reload.sh` 추가 — 빌드 + 기존 인스턴스 종료 + 새 빌드 실행을 한 번에 처리 (`TEMPO_CONFIG=Release` 지정 시 Release 빌드)
+
+#### 팝오버 리사이즈
+- 우측/하단/우하단 코너에 드래그 핸들 추가 — 가로/세로 독립 조절, 코너로 동시 조절
+- 크기는 UserDefaults에 영속화(`popoverWidth`, `popoverHeight`) — 앱 재실행 시 직전 크기 복원
+- 최소 320×360 클램프, 최댓값 제한 없음
+- 호버 시 ↔ / ↕ / ✛ 커서로 변경, 드래그 중에도 유지
+- `AppSettings.shared` Combine 구독으로 `NSPopover.contentSize` 실시간 갱신
 
 ## 사용법
 
@@ -139,6 +145,7 @@ open /Applications/Tempo.app
 | 타이머 시작 | 테스크 우측 재생 버튼 |
 | 시간 설정 | 테스크 추가 시 "분" 필드에 입력 |
 | 팝오버 닫기 | ESC |
+| 팝오버 크기 조절 | 우측/하단 가장자리 또는 우하단 코너 드래그 (크기 자동 저장) |
 
 ## 주요 기능
 
