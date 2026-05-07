@@ -124,6 +124,21 @@ open /Applications/Tempo.app
 - 호버 시 ↔ / ↕ / ✛ 커서로 변경, 드래그 중에도 유지
 - `AppSettings.shared` Combine 구독으로 `NSPopover.contentSize` 실시간 갱신
 
+#### 드래그앤드롭 사라짐 버그 해결
+- **stale row frame 누적 버그 수정** — 날짜 전환·삭제로 화면에서 빠진 행의 frame이 누적돼 드롭 hit-test에 끼어들면서 보이지 않는 다른 날짜 트리로 항목이 흡수되던 현상 제거. `DragState.replaceFrames(_:)` 추가, 매 preference 갱신 시 완전 교체.
+- **자식 모드 자동 분류 제거** — 행 가운데 50% = 자식 디폴트 폐기. 우측 절반(relX > 0.5)에서만 `.child` 모드 발동. 제자리에 두려는 의도가 의도치 않게 자식으로 빨려들어가는 일 차단.
+- **드롭이 assignedDate를 건드리지 않음** — `performDrop`은 트리 구조(부모/순서/깊이)만 변경. 부모-자식이 다른 날짜를 가질 수 있도록 허용.
+- **드롭 후 자동 스크롤 + 1.5s 노란 하이라이트** — 이동한 항목으로 즉시 스크롤하고 배경 강조. 들여쓰기가 깊어진 자식이 돼도 시각적으로 추적 가능.
+
+#### 부모 자동 완료 시 자식 cascade 알림 정리
+- `TaskService.deleteTask`가 SwiftData `@Relationship(.cascade)`에 추가로 자식 트리 알림 큐도 명시적 재귀 취소(`cancelNotificationsRecursively`).
+
+#### 날짜 표시 로직 변경 — 트리 일부만 노출
+- 기존: 루트의 assignedDate가 selectedDate면 트리 전체 노출.
+- 변경: assignedDate가 selectedDate인 task + 그 직속 조상 체인만 노출. 같은 부모의 다른 날짜 자식은 숨김.
+- 부모-자식이 서로 다른 날짜를 가질 수 있는 모델로 전환. 컨텍스트(상위 트리)는 보이고, 다른 날짜의 형제 자식은 시야에서 가려짐.
+- `MenuContentView.relevantTaskIds`가 직속 조상까지 포함한 노출 대상을 계산.
+
 ## 사용법
 
 | 동작 | 방법 |

@@ -9,10 +9,7 @@ struct MenuContentView: View {
         filter: #Predicate<TodoTask> { $0.needsCarryOverDecision == true }
     ) private var carryOverTasks: [TodoTask]
 
-    @Query(
-        filter: #Predicate<TodoTask> { $0.parent == nil },
-        sort: \TodoTask.sortOrder
-    ) private var allRootTasks: [TodoTask]
+    @Query(sort: \TodoTask.sortOrder) private var allTasks: [TodoTask]
 
     @State private var selectedTaskId: UUID?
     @State private var editingTaskId: UUID?
@@ -23,6 +20,7 @@ struct MenuContentView: View {
     @State private var keyMonitor: Any?
     @State private var dragStartWidth: CGFloat?
     @State private var dragStartHeight: CGFloat?
+    @State private var recentlyDroppedId: UUID?
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -209,6 +207,21 @@ struct MenuContentView: View {
         scrollTargetId = id
     }
 
+    // 드롭 완료 후: 이동한 항목으로 자동 스크롤 + 1.5초 동안 배경 하이라이트.
+    // 부모-자식 관계가 바뀌어 들여쓰기가 깊어진 항목도 사용자가 시각적으로 추적 가능.
+    private func handleDropCompleted(_ id: UUID) {
+        scrollTargetId = id
+        recentlyDroppedId = id
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if recentlyDroppedId == id {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    recentlyDroppedId = nil
+                }
+            }
+        }
+    }
+
     private func rootOf(_ task: TodoTask) -> TodoTask {
         var node = task
         while let parent = node.parent {
@@ -264,6 +277,7 @@ struct MenuContentView: View {
                         TaskRowView(
                             task: task,
                             isSelected: selectedTaskId == task.id,
+                            isRecentlyDropped: recentlyDroppedId == task.id,
                             onSelect: {
                                 // 행 선택 시 입력창 포커스 해제 → Backspace로 항목 삭제 가능.
                                 isInputFocused = false
@@ -276,6 +290,9 @@ struct MenuContentView: View {
                             onEdit: {
                                 selectedTaskId = task.id
                                 editingTaskId = task.id
+                            },
+                            onDropped: { droppedId in
+                                handleDropCompleted(droppedId)
                             },
                             dragState: dragState
                         )
@@ -295,9 +312,9 @@ struct MenuContentView: View {
                         .onTapGesture { selectedTaskId = nil }
                 }
                 .onPreferenceChange(RowFramePreference.self) { frames in
-                    for (id, frame) in frames {
-                        dragState.registerFrame(id, frame: frame)
-                    }
+                    // 매 갱신마다 완전 교체 — 이전 날짜·삭제된 행의 frame이 누적돼
+                    // 드롭 hit-test에 끼어드는 stale frame 버그 방지.
+                    dragState.replaceFrames(frames)
                 }
             }
             .coordinateSpace(name: "taskList")
@@ -372,26 +389,46 @@ struct MenuContentView: View {
         return try? modelContext.fetch(descriptor).first
     }
 
-    private var rootTasks: [TodoTask] {
+    // 선택 날짜에 표시할 task id 집합.
+    // 1) assignedDate가 selectedDate인 task — 본체.
+    // 2) 그 task의 직속 조상 체인 — 컨텍스트 노출용.
+    // 같은 부모의 다른 날짜 자식들은 포함 안 함(시야에서 가려짐).
+    private var relevantTaskIds: Set<UUID> {
         let dayStart = Calendar.current.startOfDay(for: selectedDate)
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)!
-        let filtered = allRootTasks.filter { $0.assignedDate >= dayStart && $0.assignedDate < dayEnd }
-        return filtered.sorted(by: orderedByActive)
+        let direct = allTasks.filter { $0.assignedDate >= dayStart && $0.assignedDate < dayEnd }
+        var ids = Set(direct.map(\.id))
+        for task in direct {
+            var current = task.parent
+            while let node = current {
+                guard ids.insert(node.id).inserted else { break }
+                current = node.parent
+            }
+        }
+        return ids
+    }
+
+    private var rootTasks: [TodoTask] {
+        let ids = relevantTaskIds
+        return allTasks
+            .filter { $0.parent == nil && ids.contains($0.id) }
+            .sorted(by: orderedByActive)
     }
 
     private var flattenedTasks: [TodoTask] {
+        let ids = relevantTaskIds
         var result: [TodoTask] = []
         for task in rootTasks {
-            flatten(task, into: &result)
+            flatten(task, into: &result, allowedIds: ids)
         }
         return result
     }
 
-    private func flatten(_ task: TodoTask, into list: inout [TodoTask]) {
+    private func flatten(_ task: TodoTask, into list: inout [TodoTask], allowedIds: Set<UUID>) {
         list.append(task)
-        // 트리 내부는 sortOrder만으로 정렬(원래 순서 유지).
-        for child in task.sortedChildren {
-            flatten(child, into: &list)
+        // 자식 중 표시 대상에 포함된 것만 재귀(다른 날짜 자식은 숨김).
+        for child in task.sortedChildren where allowedIds.contains(child.id) {
+            flatten(child, into: &list, allowedIds: allowedIds)
         }
     }
 

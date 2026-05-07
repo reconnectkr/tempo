@@ -5,8 +5,10 @@ struct TaskRowView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var task: TodoTask
     let isSelected: Bool
+    var isRecentlyDropped: Bool = false
     let onSelect: () -> Void
     let onEdit: () -> Void
+    var onDropped: (UUID) -> Void = { _ in }
     var dragState: DragState
 
     @State private var now = Date()
@@ -136,13 +138,17 @@ struct TaskRowView: View {
         withAnimation {
             TaskService.performDrop(source, onto: target, as: mode, context: modelContext)
         }
+        onDropped(source.id)
     }
 
     private var rowBackground: some View {
         ZStack(alignment: .leading) {
             // 1. 베이스 색 레이어: drop, selection 등.
+            // 드롭 직후 1.5초 하이라이트는 다른 상태보다 우선해서 사용자가 위치를 추적하도록.
             Group {
-                if dropState == .child {
+                if isRecentlyDropped {
+                    Color.yellow.opacity(0.35)
+                } else if dropState == .child {
                     Color.accentColor.opacity(0.2)
                 } else if dropState == .invalid {
                     Color.red.opacity(0.08)
