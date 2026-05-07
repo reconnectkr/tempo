@@ -55,7 +55,25 @@ struct MenuContentView: View {
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // 입력창에 포커스가 있거나 수정 모드면 텍스트 편집을 우선.
+            // 방향키는 입력창 포커스/수정 모드와 무관하게 항상 선택 이동을 처리.
+            switch event.keyCode {
+            case 126: // Up arrow → 이전 항목 (끝에서 처음으로 순환)
+                self.moveSelection(by: -1)
+                return nil
+            case 125: // Down arrow → 다음 항목 (처음에서 끝으로 순환)
+                self.moveSelection(by: 1)
+                return nil
+            case 123: // Left arrow → 이전 루트 항목
+                self.moveRootSelection(by: -1)
+                return nil
+            case 124: // Right arrow → 다음 루트 항목
+                self.moveRootSelection(by: 1)
+                return nil
+            default:
+                break
+            }
+
+            // 그 외 단축키(삭제/Space/Enter)는 텍스트 편집을 방해하지 않도록 입력 포커스 시 패스.
             guard !self.isInputFocused, self.editingTaskId == nil else { return event }
             guard let id = self.selectedTaskId, let task = self.findTask(by: id) else { return event }
 
@@ -71,10 +89,71 @@ struct MenuContentView: View {
                     TaskService.toggleInProgress(task, context: self.modelContext)
                 }
                 return nil
+            case 36, 76: // Return / Enter → 완료/미완료 토글
+                withAnimation {
+                    TaskService.toggleComplete(task, context: self.modelContext)
+                }
+                return nil
             default:
                 return event
             }
         }
+    }
+
+    // 위/아래 방향키로 보이는 행 사이에서 선택을 이동. 양 끝에서 순환.
+    // 선택 없을 때 아래키는 첫 항목, 위키는 마지막 항목으로.
+    private func moveSelection(by delta: Int) {
+        let items = flattenedTasks
+        guard !items.isEmpty else { return }
+        applySelection(in: items.map(\.id), delta: delta)
+    }
+
+    // 좌/우 방향키로 루트(메인) 항목 사이에서만 이동. 양 끝에서 순환.
+    // 자식이 선택돼 있으면 해당 자식이 속한 루트의 인접 루트로 이동.
+    private func moveRootSelection(by delta: Int) {
+        let roots = rootTasks
+        guard !roots.isEmpty else { return }
+        let ids = roots.map(\.id)
+
+        if let current = selectedTaskId,
+           let currentRoot = findTask(by: current).map(rootOf),
+           let idx = ids.firstIndex(of: currentRoot.id) {
+            let count = ids.count
+            let target = ((idx + delta) % count + count) % count
+            updateSelection(to: ids[target])
+        } else {
+            updateSelection(to: delta >= 0 ? ids.first! : ids.last!)
+        }
+    }
+
+    private func applySelection(in ids: [UUID], delta: Int) {
+        guard !ids.isEmpty else { return }
+        let nextId: UUID
+        if let current = selectedTaskId, let idx = ids.firstIndex(of: current) {
+            let count = ids.count
+            let target = ((idx + delta) % count + count) % count
+            nextId = ids[target]
+        } else {
+            // 선택 없음(또는 선택된 항목이 사라짐): ↓는 첫 루트, ↑는 마지막 루트.
+            let roots = rootTasks
+            guard let first = roots.first, let last = roots.last else { return }
+            nextId = delta >= 0 ? first.id : last.id
+        }
+        updateSelection(to: nextId)
+    }
+
+    private func updateSelection(to id: UUID) {
+        // 방향키 이동 시 입력창 포커스는 건드리지 않음. 사용자가 입력 중에도 선택만 이동.
+        selectedTaskId = id
+        scrollTargetId = id
+    }
+
+    private func rootOf(_ task: TodoTask) -> TodoTask {
+        var node = task
+        while let parent = node.parent {
+            node = parent
+        }
+        return node
     }
 
     private func removeKeyMonitor() {
