@@ -227,6 +227,26 @@ struct TaskService {
         return count
     }
 
+    // 선택 항목을 다른 날짜로 이동. 루트면 트리 전체, 자식이면 해당 서브트리만 이동.
+    // 자식만 이동한 경우 화면에서는 relevantTaskIds 로직으로 부모가 컨텍스트로 노출됨.
+    // originalDate도 함께 이동 — 의도적 재계획이므로 "O-N" 배지가 붙으면 안 됨.
+    // 자동 carry-over(carryOverToToday)와는 달라야 해서 applyAssignedDate를 그대로 두고 별도 처리.
+    static func moveByDays(_ task: TodoTask, days: Int, context: ModelContext) {
+        let calendar = Calendar.current
+        guard let target = calendar.date(byAdding: .day, value: days, to: task.assignedDate) else { return }
+        let targetStart = calendar.startOfDay(for: target)
+        applyDates(assigned: targetStart, original: targetStart, to: task)
+        try? context.save()
+    }
+
+    private static func applyDates(assigned: Date, original: Date, to task: TodoTask) {
+        task.assignedDate = assigned
+        task.originalDate = original
+        for child in task.children {
+            applyDates(assigned: assigned, original: original, to: child)
+        }
+    }
+
     static func completeCarryOver(_ task: TodoTask, context: ModelContext) {
         task.status = .completed
         task.completedAt = .now

@@ -22,19 +22,15 @@ struct TaskInputView: View {
         return selected.depth >= 2
     }
 
-    // 라벨은 항상 메인/하위. 수정 모드여도 별도 표시 없음.
-    // 수정 중인 항목이 있으면 그 항목의 부모 유무로, 아니면 selectedTask 기준으로 결정.
+    // 수정 중에는 "수정 중"으로 라벨을 바꿔 모드를 명시.
+    // 그 외에는 selectedTask 유무로 메인/하위 판단.
     private var modeLabel: String {
-        if let editing = editingTask {
-            return editing.parent == nil ? "메인" : "하위"
-        }
+        if isEditing { return "수정 중" }
         return selectedTask == nil ? "메인" : "하위"
     }
 
     private var modeLabelIsAccent: Bool {
-        if let editing = editingTask {
-            return editing.parent != nil
-        }
+        if isEditing { return true }
         return selectedTask != nil
     }
 
@@ -103,6 +99,10 @@ struct TaskInputView: View {
                     durationMinutes = ""
                 }
                 isInputFocused = true
+            } else {
+                // 수정 취소(ESC, 다른 항목 선택 등)되면 입력 비움.
+                inputText = ""
+                durationMinutes = ""
             }
         }
     }

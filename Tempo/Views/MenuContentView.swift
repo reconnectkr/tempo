@@ -36,6 +36,11 @@ struct MenuContentView: View {
         .overlay(alignment: .bottom) { resizeHandle(axis: .vertical) }
         .overlay(alignment: .bottomTrailing) { resizeHandle(axis: .both) }
         .onKeyPress(.escape) {
+            // 수정 중이면 수정 취소가 우선. 그 외에는 팝오버 닫기.
+            if editingTaskId != nil {
+                editingTaskId = nil
+                return .handled
+            }
             NSApp.keyWindow?.close()
             return .handled
         }
@@ -124,10 +129,10 @@ struct MenuContentView: View {
             case 125: // Down arrow → 다음 항목 (처음에서 끝으로 순환)
                 self.moveSelection(by: 1)
                 return nil
-            case 123: // Left arrow → 이전 루트 항목
+            case 123 where !event.modifierFlags.contains(.command): // Left arrow → 이전 루트 항목
                 self.moveRootSelection(by: -1)
                 return nil
-            case 124: // Right arrow → 다음 루트 항목
+            case 124 where !event.modifierFlags.contains(.command): // Right arrow → 다음 루트 항목
                 self.moveRootSelection(by: 1)
                 return nil
             default:
@@ -152,6 +157,21 @@ struct MenuContentView: View {
                 withAnimation {
                     TaskService.toggleComplete(task, context: self.modelContext)
                 }
+                return nil
+            case 124 where event.modifierFlags.contains(.command): // Cmd+→ → 다음날로 이동
+                withAnimation {
+                    TaskService.moveByDays(task, days: 1, context: self.modelContext)
+                }
+                self.selectedTaskId = nil
+                return nil
+            case 123 where event.modifierFlags.contains(.command): // Cmd+← → 이전날로 이동
+                withAnimation {
+                    TaskService.moveByDays(task, days: -1, context: self.modelContext)
+                }
+                self.selectedTaskId = nil
+                return nil
+            case 14 where event.modifierFlags.contains(.command): // Cmd+E → 수정
+                self.editingTaskId = task.id
                 return nil
             default:
                 return event
@@ -281,6 +301,10 @@ struct MenuContentView: View {
                             onSelect: {
                                 // 행 선택 시 입력창 포커스 해제 → Backspace로 항목 삭제 가능.
                                 isInputFocused = false
+                                // 다른 항목을 선택하면 수정 모드 자동 해제.
+                                if editingTaskId != nil, editingTaskId != task.id {
+                                    editingTaskId = nil
+                                }
                                 if selectedTaskId == task.id {
                                     selectedTaskId = nil
                                 } else {
@@ -349,11 +373,25 @@ struct MenuContentView: View {
 
     @ViewBuilder
     private func taskContextMenu(_ task: TodoTask) -> some View {
+        Button("수정") {
+            selectedTaskId = task.id
+            editingTaskId = task.id
+        }
+        .keyboardShortcut("e", modifiers: .command)
+
+        Button(task.status == .completed ? "완료 해제" : "완료") {
+            withAnimation {
+                TaskService.toggleComplete(task, context: modelContext)
+            }
+        }
+        .keyboardShortcut(.return, modifiers: [])
+
         // 타이머 미실행 + 미완료 항목에 대해 수동 진행 토글.
         if task.status != .completed, !task.isTimerRunning {
             Button(task.status == .inProgress ? "진행 중지" : "진행 시작") {
                 TaskService.toggleInProgress(task, context: modelContext)
             }
+            .keyboardShortcut(.space, modifiers: [])
         }
 
         if task.plannedDuration != nil {
@@ -365,11 +403,35 @@ struct MenuContentView: View {
             }
         }
 
+        Button("이전날로 넘기기") {
+            withAnimation {
+                TaskService.moveByDays(task, days: -1, context: modelContext)
+            }
+            if selectedTaskId == task.id {
+                selectedTaskId = nil
+            }
+        }
+        .keyboardShortcut(.leftArrow, modifiers: .command)
+
+        Button("다음날로 넘기기") {
+            withAnimation {
+                TaskService.moveByDays(task, days: 1, context: modelContext)
+            }
+            if selectedTaskId == task.id {
+                selectedTaskId = nil
+            }
+        }
+        .keyboardShortcut(.rightArrow, modifiers: .command)
+
         Button("삭제", role: .destructive) {
             withAnimation {
                 TaskService.deleteTask(task, context: modelContext)
             }
+            if selectedTaskId == task.id {
+                selectedTaskId = nil
+            }
         }
+        .keyboardShortcut(.delete, modifiers: [])
     }
 
     private var selectedTask: TodoTask? {
