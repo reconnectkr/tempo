@@ -27,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NotificationManager.shared.setup()
+        // SwiftData mainContext에 UndoManager 부착 — 삭제/이동/수정 등 ⌘Z로 되돌림.
+        modelContainer.mainContext.undoManager = UndoManager()
         statusBarController = StatusBarController(modelContainer: modelContainer)
     }
 }
