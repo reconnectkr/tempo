@@ -94,6 +94,14 @@ open /Applications/Tempo.app
 - 더블 클릭 시 선택 표시도 해당 항목으로 이동
 - 행 선택 후 Backspace로 삭제 (NSEvent local monitor, 입력창 포커스 시 텍스트 편집 우선)
 
+#### 키보드 단축키 확장
+- 행 선택 후 Space → 진행/대기 상태 토글 (`TaskService.toggleInProgress`)
+- 입력창 포커스 또는 수정 모드일 때는 모든 단축키(Backspace/Space) 비활성
+
+#### 진행 중 워터마크 다듬기
+- 한글 "진행중" → 영문 "IN PROGRESS" (18pt heavy rounded + 자간 1.5pt)
+- 색상 더 진하게(accent opacity 0.22 → 0.45)로 가독성 향상
+
 ## 사용법
 
 | 동작 | 방법 |
