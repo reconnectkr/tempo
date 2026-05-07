@@ -24,6 +24,8 @@ struct TaskService {
             siblings = (try? context.fetch(descriptor)) ?? []
         }
 
+        // 자식은 호출자가 지정한 날짜(보통 selectedDate)를 그대로 사용.
+        // 부모-자식이 서로 다른 날짜를 가질 수 있도록 허용.
         let maxOrder = siblings.map(\.sortOrder).max() ?? -1
         let task = TodoTask(
             title: title,
@@ -85,9 +87,18 @@ struct TaskService {
     // MARK: - 삭제
 
     static func deleteTask(_ task: TodoTask, context: ModelContext) {
-        stopTimer(task, context: context)
+        // SwiftData @Relationship(.cascade)가 자식까지 삭제하지만,
+        // 알림 큐는 모델 외부 자원이라 자식 트리도 명시적으로 정리해야 함.
+        cancelNotificationsRecursively(task)
         context.delete(task)
         try? context.save()
+    }
+
+    private static func cancelNotificationsRecursively(_ task: TodoTask) {
+        NotificationManager.shared.cancelNotification(taskId: task.id.uuidString)
+        for child in task.children {
+            cancelNotificationsRecursively(child)
+        }
     }
 
     // MARK: - 타이머
@@ -177,14 +188,43 @@ struct TaskService {
 
     static func carryOverToToday(_ task: TodoTask, context: ModelContext) {
         let today = Calendar.current.startOfDay(for: .now)
-        task.assignedDate = today
         task.carriedOverCount += 1
         task.needsCarryOverDecision = false
-
-        for child in task.children {
-            child.assignedDate = today
-        }
+        // 트리 전체(손자 포함)를 today로 동기화. 직계 자식만 갱신하면 3단 트리에서
+        // 손자의 assignedDate가 stale로 남아 어느 날짜 화면에서도 안 보이게 됨.
+        applyAssignedDate(today, to: task)
         try? context.save()
+    }
+
+    // 모든 자식의 assignedDate를 root와 동기화. 과거 carry-over에서 손자가 누락돼
+    // 트리 날짜가 어긋난 잔재(부모-자식 다른 날짜)를 일괄 정리. 앱 시작 시 1회 실행.
+    @discardableResult
+    static func reconcileTreeDates(context: ModelContext) -> Int {
+        let descriptor = FetchDescriptor<TodoTask>(
+            predicate: #Predicate<TodoTask> { $0.parent == nil }
+        )
+        guard let roots = try? context.fetch(descriptor) else { return 0 }
+
+        var fixed = 0
+        for root in roots {
+            fixed += reconcileSubtree(root, expected: root.assignedDate)
+        }
+        if fixed > 0 {
+            try? context.save()
+        }
+        return fixed
+    }
+
+    private static func reconcileSubtree(_ task: TodoTask, expected: Date) -> Int {
+        var count = 0
+        for child in task.children {
+            if child.assignedDate != expected {
+                child.assignedDate = expected
+                count += 1
+            }
+            count += reconcileSubtree(child, expected: expected)
+        }
+        return count
     }
 
     static func completeCarryOver(_ task: TodoTask, context: ModelContext) {
@@ -236,16 +276,12 @@ struct TaskService {
             newSortOrder = (target.children.map(\.sortOrder).max() ?? -1) + 1
         }
 
-        // 트리는 같은 assignedDate를 공유함.
-        // source가 들어갈 destination tree의 날짜를 mutation 전에 미리 캡처.
-        // (siblingAbove/Below of a root처럼 source가 root로 승격될 때
-        //  source.parent가 nil이 되어 rootOf(source)가 자기 자신이 되는 함정 회피)
-        let destinationRootDate = rootOf(target).assignedDate
-
+        // 드래그앤드롭은 트리 구조(부모·순서·깊이)만 변경하고 assignedDate는 건드리지 않음.
+        // 부모-자식이 다른 날짜를 가질 수 있는 모델에서 사용자의 날짜 의도를 보존.
+        // 날짜를 바꾸려면 carry-over나 별도 액션을 써야 함.
         source.parent = newParent
         source.sortOrder = newSortOrder
         recalculateDepth(source)
-        applyAssignedDate(destinationRootDate, to: source)
 
         try? context.save()
     }
