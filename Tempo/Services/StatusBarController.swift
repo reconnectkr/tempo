@@ -9,6 +9,7 @@ final class StatusBarController: NSObject {
     private var popover: NSPopover!
     private var rightClickMenu: NSMenu!
     private var timerCancellable: AnyCancellable?
+    private var sizeCancellable: AnyCancellable?
     private let modelContainer: ModelContainer
 
     init(modelContainer: ModelContainer) {
@@ -34,14 +35,23 @@ final class StatusBarController: NSObject {
 
     private func setupPopover() {
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 360, height: 500)
+        let settings = AppSettings.shared
+        popover.contentSize = NSSize(width: settings.popoverWidth, height: settings.popoverHeight)
         popover.behavior = .transient
         popover.animates = true
 
         let contentView = MenuContentView()
             .modelContainer(modelContainer)
+            .environmentObject(settings)
 
         popover.contentViewController = NSHostingController(rootView: contentView)
+
+        // 뷰 측 드래그가 AppSettings를 갱신하면 NSPopover.contentSize에 즉시 반영.
+        sizeCancellable = settings.$popoverWidth
+            .combineLatest(settings.$popoverHeight)
+            .sink { [weak self] width, height in
+                self?.popover.contentSize = NSSize(width: width, height: height)
+            }
     }
 
     private func setupRightClickMenu() {

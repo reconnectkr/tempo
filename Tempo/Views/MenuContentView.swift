@@ -4,6 +4,7 @@ import AppKit
 
 struct MenuContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var settings: AppSettings
     @Query(
         filter: #Predicate<TodoTask> { $0.needsCarryOverDecision == true }
     ) private var carryOverTasks: [TodoTask]
@@ -20,6 +21,8 @@ struct MenuContentView: View {
     @State private var dragState = DragState()
     @State private var scrollTargetId: UUID?
     @State private var keyMonitor: Any?
+    @State private var dragStartWidth: CGFloat?
+    @State private var dragStartHeight: CGFloat?
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -30,8 +33,10 @@ struct MenuContentView: View {
                 mainView
             }
         }
-        .frame(width: 360)
-        .frame(minHeight: 480, maxHeight: 700)
+        .frame(width: settings.popoverWidth, height: settings.popoverHeight)
+        .overlay(alignment: .trailing) { resizeHandle(axis: .horizontal) }
+        .overlay(alignment: .bottom) { resizeHandle(axis: .vertical) }
+        .overlay(alignment: .bottomTrailing) { resizeHandle(axis: .both) }
         .onKeyPress(.escape) {
             NSApp.keyWindow?.close()
             return .handled
@@ -49,13 +54,71 @@ struct MenuContentView: View {
         }
     }
 
+    // 가장자리/코너 드래그 핸들. 드래그 시작 시 현재 크기를 기준점으로 잡고,
+    // translation을 누적해 AppSettings에 반영. min 이하로 줄지 못하게 클램프.
+    // 히트 영역은 넉넉하게(엣지 14pt, 코너 22pt) 잡아 호버가 자주 잡히도록 함.
+    @ViewBuilder
+    private func resizeHandle(axis: ResizeAxis) -> some View {
+        let edgeThickness: CGFloat = 14
+        let cornerSize: CGFloat = 22
+        let cursor: NSCursor = {
+            switch axis {
+            case .horizontal: return .resizeLeftRight
+            case .vertical: return .resizeUpDown
+            case .both: return .crosshair
+            }
+        }()
+
+        Color.clear
+            .contentShape(Rectangle())
+            .frame(
+                width: axis == .vertical ? nil : (axis == .both ? cornerSize : edgeThickness),
+                height: axis == .horizontal ? nil : (axis == .both ? cornerSize : edgeThickness)
+            )
+            // onContinuousHover는 onHover보다 안정적으로 진입/이탈을 잡고,
+            // 매 프레임 set()을 호출해 다른 영역과의 충돌(스택 누락)을 방지.
+            .onContinuousHover { phase in
+                switch phase {
+                case .active:
+                    cursor.set()
+                case .ended:
+                    NSCursor.arrow.set()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { value in
+                        cursor.set() // 드래그 중에도 커서 유지.
+                        if dragStartWidth == nil { dragStartWidth = settings.popoverWidth }
+                        if dragStartHeight == nil { dragStartHeight = settings.popoverHeight }
+
+                        let dx = value.translation.width
+                        let dy = value.translation.height
+
+                        if axis != .vertical, let baseW = dragStartWidth {
+                            settings.popoverWidth = settings.clampWidth(baseW + dx)
+                        }
+                        if axis != .horizontal, let baseH = dragStartHeight {
+                            settings.popoverHeight = settings.clampHeight(baseH + dy)
+                        }
+                    }
+                    .onEnded { _ in
+                        dragStartWidth = nil
+                        dragStartHeight = nil
+                    }
+            )
+    }
+
     // 메뉴바 popover에서 키보드 단축키 처리.
     // .onKeyPress / .onDeleteCommand 는 SwiftUI 포커스 의존이라 신뢰성 부족.
     // NSEvent local monitor로 keyDown을 직접 받음.
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // 방향키는 입력창 포커스/수정 모드와 무관하게 항상 선택 이동을 처리.
+            // 입력창 포커스 또는 수정 중에는 모든 단축키(방향키 포함) 비활성.
+            // 텍스트 커서 이동/편집이 우선이라 행 선택 이동은 막아야 함.
+            guard !self.isInputFocused, self.editingTaskId == nil else { return event }
+
             switch event.keyCode {
             case 126: // Up arrow → 이전 항목 (끝에서 처음으로 순환)
                 self.moveSelection(by: -1)
@@ -73,8 +136,6 @@ struct MenuContentView: View {
                 break
             }
 
-            // 그 외 단축키(삭제/Space/Enter)는 텍스트 편집을 방해하지 않도록 입력 포커스 시 패스.
-            guard !self.isInputFocused, self.editingTaskId == nil else { return event }
             guard let id = self.selectedTaskId, let task = self.findTask(by: id) else { return event }
 
             switch event.keyCode {
@@ -363,4 +424,10 @@ struct MenuContentView: View {
             }
         }
     }
+}
+
+private enum ResizeAxis {
+    case horizontal
+    case vertical
+    case both
 }
