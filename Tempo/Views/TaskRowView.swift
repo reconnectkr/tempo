@@ -155,9 +155,10 @@ struct TaskRowView: View {
 
             // 2. 진행 중 워터마크: 행 가로 중앙에 흐린 텍스트.
             if task.status == .inProgress {
-                Text("진행중")
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
-                    .foregroundStyle(Color.accentColor.opacity(0.22))
+                Text("IN PROGRESS")
+                    .font(.system(size: 18, weight: .heavy, design: .rounded))
+                    .tracking(1.5)
+                    .foregroundStyle(Color.accentColor.opacity(0.45))
                     .frame(maxWidth: .infinity, alignment: .center)
             }
 
