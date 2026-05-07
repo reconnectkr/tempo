@@ -6,6 +6,7 @@ struct TaskRowView: View {
     @Bindable var task: TodoTask
     let isSelected: Bool
     let onSelect: () -> Void
+    let onEdit: () -> Void
     var dragState: DragState
 
     @State private var now = Date()
@@ -38,7 +39,7 @@ struct TaskRowView: View {
     var body: some View {
         VStack(spacing: 0) {
             if dropState == .above {
-                dropLine
+                siblingDropLine
             }
 
             HStack(spacing: 8) {
@@ -57,7 +58,23 @@ struct TaskRowView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
+                    // 더블 탭이 single 탭보다 먼저 와야 SwiftUI가 두 제스처를 분리함.
+                    .onTapGesture(count: 2) { onEdit() }
                     .onTapGesture { onSelect() }
+                    .gesture(
+                        DragGesture(minimumDistance: 5, coordinateSpace: .named("taskList"))
+                            .onChanged { value in
+                                if !dragState.isDragging {
+                                    dragState.draggedTaskId = task.id
+                                }
+                                dragState.dragOffset = value.translation
+                                dragState.updateDrop(at: value.location)
+                            }
+                            .onEnded { _ in
+                                performDropIfNeeded()
+                                dragState.reset()
+                            }
+                    )
 
                 if task.daysActive >= 2, task.status != .completed {
                     Text("O-\(task.daysActive - 1)")
@@ -82,24 +99,13 @@ struct TaskRowView: View {
                         .preference(key: RowFramePreference.self, value: [task.id: geo.frame(in: .named("taskList"))])
                 }
             )
-            .gesture(
-                DragGesture(minimumDistance: 5, coordinateSpace: .named("taskList"))
-                    .onChanged { value in
-                        if !dragState.isDragging {
-                            dragState.draggedTaskId = task.id
-                        }
-                        dragState.dragOffset = value.translation
-                        dragState.updateDrop(at: value.location)
-                    }
-                    .onEnded { _ in
-                        performDropIfNeeded()
-                        dragState.reset()
-                    }
-            )
-            .opacity(dragState.draggedTaskId == task.id ? 0.4 : 1.0)
+            .modifier(DragVisualModifier(isDragging: dragState.draggedTaskId == task.id, offset: dragState.dragOffset))
 
             if dropState == .below {
-                dropLine
+                siblingDropLine
+            }
+            if dropState == .child {
+                childDropLine
             }
         }
         .onReceive(timer) { _ in
@@ -130,24 +136,51 @@ struct TaskRowView: View {
     }
 
     private var rowBackground: some View {
-        Group {
-            if dropState == .child {
-                Color.accentColor.opacity(0.12)
-            } else if dropState == .invalid {
-                Color.red.opacity(0.08)
-            } else if isSelected {
-                Color.accentColor.opacity(0.1)
-            } else {
-                Color.clear
+        ZStack(alignment: .leading) {
+            // 1. 베이스 색 레이어: drop, selection 등.
+            Group {
+                if dropState == .child {
+                    Color.accentColor.opacity(0.2)
+                } else if dropState == .invalid {
+                    Color.red.opacity(0.08)
+                } else if isSelected {
+                    Color.accentColor.opacity(0.1)
+                } else {
+                    Color.clear
+                }
             }
+
+            // 2. 진행 중 워터마크: 행 가로 중앙에 흐린 텍스트.
+            if task.status == .inProgress {
+                Text("진행중")
+                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Color.accentColor.opacity(0.22))
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
         }
     }
 
-    private var dropLine: some View {
-        Rectangle()
-            .fill(Color.accentColor)
-            .frame(height: 2)
-            .padding(.horizontal, 12)
+    // 형제로 떨어질 때: 떨어진 항목의 최종 depth(=target.depth)에 맞춰 들여쓴 라인.
+    private var siblingDropLine: some View {
+        HStack(spacing: 0) {
+            Spacer().frame(width: CGFloat(task.depth) * 24 + 12)
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 3)
+            Spacer().frame(width: 12)
+        }
+    }
+
+    // 자식으로 떨어질 때: 한 단계 더 들여쓴 ghost line으로 "안으로 들어감"을 시각화.
+    private var childDropLine: some View {
+        HStack(spacing: 0) {
+            Spacer().frame(width: CGFloat(task.depth + 1) * 24 + 12)
+            Rectangle()
+                .fill(Color.accentColor.opacity(0.7))
+                .frame(height: 3)
+            Spacer().frame(width: 12)
+        }
     }
 
     @ViewBuilder
@@ -187,6 +220,19 @@ struct TaskRowView: View {
                 }
             }
         }
+    }
+}
+
+private struct DragVisualModifier: ViewModifier {
+    let isDragging: Bool
+    let offset: CGSize
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isDragging ? 0.9 : 1.0)
+            .offset(isDragging ? offset : .zero)
+            .shadow(color: .black.opacity(isDragging ? 0.18 : 0), radius: 6, y: 3)
+            .zIndex(isDragging ? 1 : 0)
     }
 }
 
