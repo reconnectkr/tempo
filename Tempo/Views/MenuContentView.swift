@@ -135,6 +135,12 @@ struct MenuContentView: View {
             case 124 where !event.modifierFlags.contains(.command): // Right arrow → 다음 루트 항목
                 self.moveRootSelection(by: 1)
                 return nil
+            case 6 where event.modifierFlags.contains([.command, .shift]): // Cmd+Shift+Z → redo
+                self.modelContext.undoManager?.redo()
+                return nil
+            case 6 where event.modifierFlags.contains(.command): // Cmd+Z → undo
+                self.modelContext.undoManager?.undo()
+                return nil
             default:
                 break
             }
