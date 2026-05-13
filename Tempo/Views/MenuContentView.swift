@@ -20,21 +20,43 @@ struct MenuContentView: View {
     @State private var keyMonitor: Any?
     @State private var dragStartWidth: CGFloat?
     @State private var dragStartHeight: CGFloat?
+    @State private var dragStartPanelWidth: CGFloat?
     @State private var recentlyDroppedId: UUID?
+    // 패널이 열려 있는지 여부. 선택 상태와 분리해 별도로 관리.
+    // 항목 선택 → 자동 열림. 선택 해제만으로는 닫히지 않음(삭제 후에도 패널 폭 유지하기 위함).
+    // 명시적 닫기는 빈 영역 클릭에서만 발생.
+    @State private var isPanelOpen: Bool = false
     @FocusState private var isInputFocused: Bool
+
+    private var totalWidth: CGFloat {
+        settings.popoverWidth + (isPanelOpen && carryOverTasks.isEmpty ? settings.detailPanelWidth : 0)
+    }
 
     var body: some View {
         Group {
             if !carryOverTasks.isEmpty {
                 CarryOverView()
             } else {
-                mainView
+                splitView
             }
         }
-        .frame(width: settings.popoverWidth, height: settings.popoverHeight)
+        .frame(width: totalWidth, height: settings.popoverHeight)
         .overlay(alignment: .trailing) { resizeHandle(axis: .horizontal) }
         .overlay(alignment: .bottom) { resizeHandle(axis: .vertical) }
         .overlay(alignment: .bottomTrailing) { resizeHandle(axis: .both) }
+        .onChange(of: selectedTaskId) { _, newValue in
+            // 항목을 선택하면 패널 자동 열림. 선택 해제(예: 삭제)는 패널을 닫지 않음 —
+            // 삭제 시 popover가 갑자기 좁아지는 시각적 점프를 피하기 위함.
+            if newValue != nil { isPanelOpen = true }
+            settings.detailPanelOpen = isPanelOpen && carryOverTasks.isEmpty
+        }
+        .onChange(of: isPanelOpen) { _, _ in
+            settings.detailPanelOpen = isPanelOpen && carryOverTasks.isEmpty
+        }
+        .onChange(of: carryOverTasks.isEmpty) { _, mainVisible in
+            // carry-over 화면에서는 패널 폭 누적 안 함.
+            settings.detailPanelOpen = mainVisible && isPanelOpen
+        }
         .onKeyPress(.escape) {
             // 수정 중이면 수정 취소가 우선. 그 외에는 팝오버 닫기.
             if editingTaskId != nil {
@@ -48,6 +70,7 @@ struct MenuContentView: View {
             handleDayChangeIfNeeded()
             setupNotificationHandlers()
             installKeyMonitor()
+            settings.detailPanelOpen = isPanelOpen && carryOverTasks.isEmpty
         }
         .onDisappear {
             removeKeyMonitor()
@@ -118,8 +141,11 @@ struct MenuContentView: View {
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // 입력창 포커스 또는 수정 중에는 모든 단축키(방향키 포함) 비활성.
-            // 텍스트 커서 이동/편집이 우선이라 행 선택 이동은 막아야 함.
+            // 텍스트 입력 위젯에 포커스가 있으면 모든 단축키 비활성.
+            // SwiftUI의 TextField/TextEditor는 내부적으로 NSTextView를 first responder로 만들기 때문에
+            // 이 한 줄로 디테일 패널·인라인 수정·새 입력 등 모든 텍스트 편집 상황을 한꺼번에 보호함.
+            // 텍스트 편집 중에는 Backspace가 항목 삭제로, 방향키가 행 이동으로 잡히면 안 됨.
+            if isTextInputActive() { return event }
             guard !self.isInputFocused, self.editingTaskId == nil else { return event }
 
             switch event.keyCode {
@@ -256,6 +282,16 @@ struct MenuContentView: View {
         return node
     }
 
+    // 키 모니터가 현재 텍스트 편집 중인지 판별.
+    // NSTextView를 직접 검사하고, 추가로 NSText(에디팅 중인 NSTextField는 내부 field editor가
+    // NSTextView 인스턴스이므로 첫 번째 조건에서 잡힘)도 함께 본다.
+    private func isTextInputActive() -> Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+        if responder is NSTextView { return true }
+        if let text = responder as? NSText, text.isEditable { return true }
+        return false
+    }
+
     private func removeKeyMonitor() {
         if let monitor = keyMonitor {
             NSEvent.removeMonitor(monitor)
@@ -270,6 +306,62 @@ struct MenuContentView: View {
         }
         currentDayStart = newDayStart
         TaskService.checkCarryOver(context: modelContext)
+    }
+
+    // 리스트 + (선택 시) 디테일 패널을 가로 분할. 사이에 드래그 가능한 구분자.
+    @ViewBuilder
+    private var splitView: some View {
+        HStack(spacing: 0) {
+            mainView
+                .frame(width: settings.popoverWidth)
+
+            if isPanelOpen {
+                panelSeparator
+                Group {
+                    if let task = selectedTask {
+                        TaskDetailPanelView(task: task)
+                    } else {
+                        // 항목이 선택되지 않은 상태(예: 삭제 직후) — 스켈레톤 자리표시자.
+                        // 패널 폭은 그대로 유지해 popover 크기 변화로 인한 시각적 점프 방지.
+                        TaskDetailPanelSkeletonView()
+                    }
+                }
+                .frame(width: settings.detailPanelWidth)
+            }
+        }
+    }
+
+    // 리스트와 패널 사이의 세로 구분자. 드래그로 패널 폭 조정.
+    // 마우스를 오른쪽으로 끌면 패널이 좁아짐(=리스트가 넓어짐)이 직관적이라
+    // dx 만큼 detailPanelWidth에서 빼는 방향으로 매핑.
+    @ViewBuilder
+    private var panelSeparator: some View {
+        Divider()
+            .overlay(
+                Color.clear
+                    .frame(width: 6)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active: NSCursor.resizeLeftRight.set()
+                        case .ended: NSCursor.arrow.set()
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                            .onChanged { value in
+                                NSCursor.resizeLeftRight.set()
+                                if dragStartPanelWidth == nil {
+                                    dragStartPanelWidth = settings.detailPanelWidth
+                                }
+                                let dx = value.translation.width
+                                if let base = dragStartPanelWidth {
+                                    settings.detailPanelWidth = settings.clampDetailPanelWidth(base - dx)
+                                }
+                            }
+                            .onEnded { _ in dragStartPanelWidth = nil }
+                    )
+            )
     }
 
     private var mainView: some View {
@@ -339,7 +431,11 @@ struct MenuContentView: View {
                     Color.clear
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())
-                        .onTapGesture { selectedTaskId = nil }
+                        .onTapGesture {
+                            // 빈 영역 클릭은 명시적 닫기 — 선택 해제와 함께 패널도 닫는다.
+                            selectedTaskId = nil
+                            isPanelOpen = false
+                        }
                 }
                 .onPreferenceChange(RowFramePreference.self) { frames in
                     // 매 갱신마다 완전 교체 — 이전 날짜·삭제된 행의 frame이 누적돼
