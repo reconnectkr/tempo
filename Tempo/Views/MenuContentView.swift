@@ -554,13 +554,26 @@ struct MenuContentView: View {
     }
 
     // 선택 날짜에 표시할 task id 집합.
-    // 1) assignedDate가 selectedDate인 task — 본체.
+    // 1) 활성 구간 [originalDate, effectiveEnd]에 selectedDate가 포함되는 task — 본체.
+    //    effectiveEnd: 미완료면 assignedDate, 완료면 min(assignedDate, 완료일).
+    //    즉 3일 전 시작해 지금까지 진행 중인 항목은 3일 전부터 오늘까지 매일 노출됨.
     // 2) 그 task의 직속 조상 체인 — 컨텍스트 노출용.
     // 같은 부모의 다른 날짜 자식들은 포함 안 함(시야에서 가려짐).
     private var relevantTaskIds: Set<UUID> {
-        let dayStart = Calendar.current.startOfDay(for: selectedDate)
-        let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)!
-        let direct = allTasks.filter { $0.assignedDate >= dayStart && $0.assignedDate < dayEnd }
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: selectedDate)
+        let direct = allTasks.filter { task in
+            guard task.originalDate <= dayStart else { return false }
+            let baseEnd = task.assignedDate
+            let effectiveEnd: Date
+            if let completedAt = task.completedAt {
+                let completedDay = calendar.startOfDay(for: completedAt)
+                effectiveEnd = min(baseEnd, completedDay)
+            } else {
+                effectiveEnd = baseEnd
+            }
+            return effectiveEnd >= dayStart
+        }
         var ids = Set(direct.map(\.id))
         for task in direct {
             var current = task.parent
