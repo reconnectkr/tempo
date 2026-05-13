@@ -279,6 +279,13 @@ struct TaskService {
         as mode: DropMode,
         context: ModelContext
     ) {
+        // 제자리 드롭(결과가 현재 상태와 동일) no-op 처리.
+        // 이 가드가 있어야 드롭 영역 중앙을 자식으로 적극 해석해도
+        // 같은 줄에 그대로 놓은 동작이 의도치 않게 자식화되지 않음.
+        if isNoOpDrop(source: source, target: target, mode: mode) {
+            return
+        }
+
         let newParent: TodoTask?
         let newSortOrder: Int
 
@@ -304,6 +311,24 @@ struct TaskService {
         recalculateDepth(source)
 
         try? context.save()
+    }
+
+    private static func isNoOpDrop(source: TodoTask, target: TodoTask, mode: DropMode) -> Bool {
+        switch mode {
+        case .siblingAbove:
+            // 이미 target과 같은 부모를 가지면서 target 바로 위에 있으면 변화 없음.
+            guard source.parent === target.parent else { return false }
+            return source.sortOrder + 1 == target.sortOrder
+        case .siblingBelow:
+            // 이미 target과 같은 부모를 가지면서 target 바로 아래에 있으면 변화 없음.
+            guard source.parent === target.parent else { return false }
+            return source.sortOrder == target.sortOrder + 1
+        case .child:
+            // 이미 target의 자식이고 children 마지막이면 변화 없음.
+            guard source.parent === target else { return false }
+            let maxOrder = target.children.map(\.sortOrder).max() ?? -1
+            return source.sortOrder == maxOrder
+        }
     }
 
     private static func rootOf(_ task: TodoTask) -> TodoTask {

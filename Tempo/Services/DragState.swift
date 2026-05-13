@@ -33,19 +33,18 @@ final class DragState {
             guard id != draggedTaskId else { continue }
             guard frame.contains(point) else { continue }
 
-            let relX = (point.x - frame.minX) / frame.width
             let relY = (point.y - frame.minY) / frame.height
 
-            // 자식 모드는 사용자가 우측 절반으로 명확히 끌었을 때만 발동.
-            // 그 외에는 Y 위치에 따라 형제(위/아래)로 떨어짐 — 제자리에 두려는 의도가
-            // 의도치 않게 자식으로 흡수되어 화면에서 "사라지는" 현상 방지.
+            // 행을 세로로 3등분: 상단 20% = 위 형제, 중앙 60% = 자식, 하단 20% = 아래 형제.
+            // 중앙에 명확히 겹치면 자식으로 흡수. 제자리에 두려는 동작은
+            // TaskService.performDrop의 no-op 가드에서 걸러냄.
             let mode: DropMode
-            if relX > 0.5 {
-                mode = .child
-            } else if relY < 0.5 {
+            if relY < 0.2 {
                 mode = .siblingAbove
-            } else {
+            } else if relY > 0.8 {
                 mode = .siblingBelow
+            } else {
+                mode = .child
             }
 
             bestMatch = (id, mode)
