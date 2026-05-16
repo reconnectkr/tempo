@@ -13,6 +13,7 @@
 		3CDADF7F0E8CF5D819573198 /* TempoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE37B2DC31D748FD529F6B6B /* TempoApp.swift */; };
 		462D5D7295CA9A9303D1BCF7 /* HeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2203F65EE7F7D28718ED083D /* HeaderView.swift */; };
 		5B63DB23A4BD12A0D9CBB010 /* CalendarPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 109CAED1D82A4C6F28D7630C /* CalendarPickerView.swift */; };
+		60C4B62175CD4093EF520CC3 /* TaskDetailPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD1A31C40216CABE6AD9E0D /* TaskDetailPanelView.swift */; };
 		772AC2B2FE92635DEC46E68A /* DragState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87E70BF6EE8FE5C97BAA2D3E /* DragState.swift */; };
 		782C68FA007C802DA5C6E2E8 /* MenuBarLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B41A8A496769984C16F6187 /* MenuBarLabel.swift */; };
 		78D431FC734932DC2397F4AB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 19BD6B0F4B6E8C72E51A9764 /* Assets.xcassets */; };
@@ -36,6 +37,7 @@
 		2203F65EE7F7D28718ED083D /* HeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
 		270B87214C8958180521CF6C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		274E228A75DFAA026D96512D /* TimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerManager.swift; sourceTree = "<group>"; };
+		2AD1A31C40216CABE6AD9E0D /* TaskDetailPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailPanelView.swift; sourceTree = "<group>"; };
 		4395E5715D349B4AFE0FDDB5 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		7BDACDDF84D81C3CD11CFD61 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		87E70BF6EE8FE5C97BAA2D3E /* DragState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragState.swift; sourceTree = "<group>"; };
@@ -113,6 +115,7 @@
 				2203F65EE7F7D28718ED083D /* HeaderView.swift */,
 				9B41A8A496769984C16F6187 /* MenuBarLabel.swift */,
 				C0AC288B47ED4D74D7346E7E /* MenuContentView.swift */,
+				2AD1A31C40216CABE6AD9E0D /* TaskDetailPanelView.swift */,
 				ED20B1501A3E281B15DBFCFF /* TaskInputView.swift */,
 				14CD3CC4493B5F3587FCCAA8 /* TaskRowView.swift */,
 			);
@@ -197,6 +200,7 @@
 				DAEE893F0621D3AE08D2BCA3 /* MenuContentView.swift in Sources */,
 				7BDF3C1515001127EA7BAFEF /* NotificationManager.swift in Sources */,
 				CA233CBE7F4455308C89D79B /* StatusBarController.swift in Sources */,
+				60C4B62175CD4093EF520CC3 /* TaskDetailPanelView.swift in Sources */,
 				0B66011609E7165338AE3A05 /* TaskInputView.swift in Sources */,
 				37AABBF9930A6E14268624FF /* TaskRowView.swift in Sources */,
 				D5B44621312530E860B4D400 /* TaskService.swift in Sources */,

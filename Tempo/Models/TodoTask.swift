@@ -27,6 +27,8 @@ final class TodoTask {
 
     var needsCarryOverDecision: Bool
 
+    var memo: String = ""
+
     @Transient
     var status: TaskStatus {
         get { TaskStatus(rawValue: statusRaw) ?? .pending }

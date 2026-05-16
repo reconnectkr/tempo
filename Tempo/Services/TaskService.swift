@@ -247,6 +247,52 @@ struct TaskService {
         }
     }
 
+    // MARK: - 디테일 패널 편집
+
+    static func updateTitle(_ task: TodoTask, title: String, context: ModelContext) {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != task.title else { return }
+        task.title = trimmed
+        try? context.save()
+    }
+
+    static func updateMemo(_ task: TodoTask, memo: String, context: ModelContext) {
+        guard memo != task.memo else { return }
+        task.memo = memo
+        try? context.save()
+    }
+
+    static func updateCreatedAt(_ task: TodoTask, date: Date, context: ModelContext) {
+        guard date != task.createdAt else { return }
+        task.createdAt = date
+        try? context.save()
+    }
+
+    // 디테일 패널의 "최초 날짜" 편집용. 자기 자신만 갱신(자식 트리는 건드리지 않음 —
+    // assignedDate 변경과 달리, originalDate는 항목별 carry-over 시작 시점을 표현).
+    static func updateOriginalDate(_ task: TodoTask, date: Date, context: ModelContext) {
+        let day = Calendar.current.startOfDay(for: date)
+        guard day != task.originalDate else { return }
+        task.originalDate = day
+        try? context.save()
+    }
+
+    static func updateCompletedAt(_ task: TodoTask, date: Date, context: ModelContext) {
+        guard task.completedAt != nil, date != task.completedAt else { return }
+        task.completedAt = date
+        try? context.save()
+    }
+
+    // 특정 절대 날짜로 이동. moveByDays와 달리 임의의 날짜 지정 가능.
+    // originalDate도 함께 갱신해 의도적 재계획임을 명시(carry-over 배지 미부착).
+    // 자식 서브트리도 동일하게 따라감.
+    static func updateAssignedDate(_ task: TodoTask, date: Date, context: ModelContext) {
+        let target = Calendar.current.startOfDay(for: date)
+        guard target != task.assignedDate else { return }
+        applyDates(assigned: target, original: target, to: task)
+        try? context.save()
+    }
+
     static func completeCarryOver(_ task: TodoTask, context: ModelContext) {
         task.status = .completed
         task.completedAt = .now
@@ -279,6 +325,13 @@ struct TaskService {
         as mode: DropMode,
         context: ModelContext
     ) {
+        // 제자리 드롭(결과가 현재 상태와 동일) no-op 처리.
+        // 이 가드가 있어야 드롭 영역 중앙을 자식으로 적극 해석해도
+        // 같은 줄에 그대로 놓은 동작이 의도치 않게 자식화되지 않음.
+        if isNoOpDrop(source: source, target: target, mode: mode) {
+            return
+        }
+
         let newParent: TodoTask?
         let newSortOrder: Int
 
@@ -304,6 +357,24 @@ struct TaskService {
         recalculateDepth(source)
 
         try? context.save()
+    }
+
+    private static func isNoOpDrop(source: TodoTask, target: TodoTask, mode: DropMode) -> Bool {
+        switch mode {
+        case .siblingAbove:
+            // 이미 target과 같은 부모를 가지면서 target 바로 위에 있으면 변화 없음.
+            guard source.parent === target.parent else { return false }
+            return source.sortOrder + 1 == target.sortOrder
+        case .siblingBelow:
+            // 이미 target과 같은 부모를 가지면서 target 바로 아래에 있으면 변화 없음.
+            guard source.parent === target.parent else { return false }
+            return source.sortOrder == target.sortOrder + 1
+        case .child:
+            // 이미 target의 자식이고 children 마지막이면 변화 없음.
+            guard source.parent === target else { return false }
+            let maxOrder = target.children.map(\.sortOrder).max() ?? -1
+            return source.sortOrder == maxOrder
+        }
     }
 
     private static func rootOf(_ task: TodoTask) -> TodoTask {

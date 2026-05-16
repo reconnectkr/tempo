@@ -36,7 +36,8 @@ final class StatusBarController: NSObject {
     private func setupPopover() {
         popover = NSPopover()
         let settings = AppSettings.shared
-        popover.contentSize = NSSize(width: settings.popoverWidth, height: settings.popoverHeight)
+        let initialWidth = settings.popoverWidth + (settings.detailPanelOpen ? settings.detailPanelWidth : 0)
+        popover.contentSize = NSSize(width: initialWidth, height: settings.popoverHeight)
         popover.behavior = .transient
         popover.animates = true
 
@@ -47,7 +48,14 @@ final class StatusBarController: NSObject {
         popover.contentViewController = NSHostingController(rootView: contentView)
 
         // 뷰 측 드래그가 AppSettings를 갱신하면 NSPopover.contentSize에 즉시 반영.
-        sizeCancellable = settings.$popoverWidth
+        // popoverWidth(리스트) + (panelOpen ? detailPanelWidth : 0) 을 총 폭으로 반영.
+        // 패널이 열리거나 닫힐 때, 패널 폭이 바뀔 때, 리스트 폭이 바뀔 때 모두 popover 크기에 즉시 동기화.
+        let widthStream = settings.$popoverWidth
+            .combineLatest(settings.$detailPanelWidth, settings.$detailPanelOpen)
+            .map { listW, panelW, open -> CGFloat in
+                listW + (open ? panelW : 0)
+            }
+        sizeCancellable = widthStream
             .combineLatest(settings.$popoverHeight)
             .sink { [weak self] width, height in
                 self?.popover.contentSize = NSSize(width: width, height: height)
