@@ -121,25 +121,49 @@ final class StatusBarController: NSObject {
     private func updateTimerDisplay() {
         let context = modelContainer.mainContext
         let now = Date.now
-        let descriptor = FetchDescriptor<TodoTask>(
-            predicate: #Predicate<TodoTask> { $0.timerEndsAt != nil },
-            sortBy: [SortDescriptor(\.timerEndsAt)]
-        )
 
-        guard let tasks = try? context.fetch(descriptor) else {
-            statusItem.button?.title = ""
+        // FOCUS 0번째(focusOrder 최소) root 조회. SwiftData predicate에서 parent.isFocused 직접
+        // 비교가 어려워 isFocused=true 전체를 가져온 뒤 메모리에서 root 필터.
+        let focusedDescriptor = FetchDescriptor<TodoTask>(
+            predicate: #Predicate<TodoTask> { $0.isFocused == true }
+        )
+        let focusedAll = (try? context.fetch(focusedDescriptor)) ?? []
+        let focusedFirst = focusedAll
+            .filter { $0.status != .completed && !($0.parent?.isFocused ?? false) }
+            .sorted { $0.focusOrder < $1.focusOrder }
+            .first
+
+        // 메뉴바에서 시각적으로 무거워지지 않도록 제목은 18자에서 잘라 말줄임표.
+        if let focused = focusedFirst {
+            let title = Self.truncate(focused.title, max: 18)
+            if let endsAt = focused.timerEndsAt, focused.isTimerRunning, endsAt > now {
+                let remaining = max(0, endsAt.timeIntervalSince(now))
+                statusItem.button?.title = " \(title)  \(TimerManager.formatTime(remaining))"
+            } else {
+                statusItem.button?.title = " \(title)"
+            }
             return
         }
 
+        // FOCUS 없을 때는 기존 동작 — 가장 빠른 타이머 남은 시간.
+        let timerDescriptor = FetchDescriptor<TodoTask>(
+            predicate: #Predicate<TodoTask> { $0.timerEndsAt != nil },
+            sortBy: [SortDescriptor(\.timerEndsAt)]
+        )
+        let tasks = (try? context.fetch(timerDescriptor)) ?? []
         let running = tasks.filter { $0.isTimerRunning && ($0.timerEndsAt ?? .distantPast) > now }
 
         if let nearest = running.first, let endsAt = nearest.timerEndsAt {
             let remaining = max(0, endsAt.timeIntervalSince(now))
-            let text = TimerManager.formatTime(remaining)
-            statusItem.button?.title = " \(text)"
+            statusItem.button?.title = " \(TimerManager.formatTime(remaining))"
         } else {
             statusItem.button?.title = ""
         }
+    }
+
+    private static func truncate(_ s: String, max: Int) -> String {
+        guard s.count > max else { return s }
+        return String(s.prefix(max)) + "…"
     }
 
     private func makeCheckmarkImage() -> NSImage {

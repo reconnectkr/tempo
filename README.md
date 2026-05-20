@@ -120,6 +120,15 @@ open /Applications/Tempo.app
 - `Cmd+F` → 선택 작업 FOCUS 토글 (부모면 트리 전체 동반)
 - 방향키 ↑/↓은 화면에 보이는 순서(FOCUS → INPROGRESS → QUEUE → COMPLETED) 그대로 순회. 폴드된 섹션은 건너뜀
 
+#### 메뉴바 라벨에 FOCUS 0번째 노출
+- 드롭다운을 열지 않고도 지금 집중하는 일을 흘끗 확인 가능
+- 표시 규칙
+  - FOCUS 0번째(focusOrder 최소 root)가 있으면 그 제목을 메뉴바에 노출. 제목이 길면 18자에서 `…`로 truncate
+  - 그 항목의 타이머가 켜져 있으면 제목 뒤에 남은 시간 같이 (`tempo 업데이트  12:34`)
+  - FOCUS가 없을 때는 기존 동작 — 가장 빠른 타이머 남은 시간만
+  - 둘 다 없으면 체크마크 아이콘만
+- 1초 주기로 갱신 (`StatusBarController.updateTimerDisplay`)
+
 ### 2026-05-07
 
 #### 드래그앤드롭 UX 안정화
