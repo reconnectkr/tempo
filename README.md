@@ -128,6 +128,7 @@ open /Applications/Tempo.app
   - FOCUS가 없을 때는 기존 동작 — 가장 빠른 타이머 남은 시간만
   - 둘 다 없으면 체크마크 아이콘만
 - 1초 주기로 갱신 (`StatusBarController.updateTimerDisplay`)
+- **메뉴바 라벨 폭 220pt 고정** — FOCUS 제목·타이머 시간이 바뀔 때마다 라벨이 늘었다 줄었다 하면서 popover anchor가 좌우로 흔들리는 문제 해결. 짧은 컨텐츠일 땐 우측에 여백이 남지만 popover 위치가 항상 같은 자리에서 열려 클릭 동선이 안정됨
 
 ### 2026-05-07
 
