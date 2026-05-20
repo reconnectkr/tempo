@@ -45,6 +45,8 @@ struct TaskService {
         if task.status == .completed {
             task.status = .pending
             task.completedAt = nil
+            // 완료 해제 시 자손도 함께 해제 (사용자 요청). 완료 진입 때와 대칭.
+            propagateUncompleteDownward(from: task)
         } else {
             task.status = .completed
             task.completedAt = .now
@@ -53,9 +55,35 @@ struct TaskService {
             task.isFocused = false
             stopTimer(task, context: context)
             NSSound(named: "Glass")?.play()
+            // 자손 자동 완료 → 부모 자동 완료(루트까지) 순서. 자손이 모두 완료된 뒤
+            // upward 전파를 호출해야 일관됨.
+            propagateCompletionDownward(from: task, context: context)
             propagateCompletionUpward(from: task, context: context)
         }
         try? context.save()
+    }
+
+    // 부모 → 자손 방향 자동 완료. 부모를 완료 처리하면 모든 미완료 자손도 함께 완료.
+    // 이미 완료된 자손은 completedAt이 보존됨(소급 갱신하지 않음). 자손에 isFocused·타이머가
+    // 있었다면 함께 정리.
+    private static func propagateCompletionDownward(from task: TodoTask, context: ModelContext) {
+        for child in task.children where child.status != .completed {
+            child.status = .completed
+            child.completedAt = .now
+            child.isFocused = false
+            stopTimer(child, context: context)
+            propagateCompletionDownward(from: child, context: context)
+        }
+    }
+
+    // 부모 → 자손 방향 완료 해제. 자손 중 완료 상태인 항목만 pending으로 되돌림.
+    // 이미 미완료(pending/inProgress)인 자손은 그대로 둠.
+    private static func propagateUncompleteDownward(from task: TodoTask) {
+        for child in task.children where child.status == .completed {
+            child.status = .pending
+            child.completedAt = nil
+            propagateUncompleteDownward(from: child)
+        }
     }
 
     // 하위 항목이 모두 완료되면 부모도 자동 완료. 루트까지 재귀 전파.
@@ -115,6 +143,8 @@ struct TaskService {
     static func setStatus(_ task: TodoTask, to newStatus: TaskStatus, context: ModelContext) {
         guard task.status != newStatus else { return }
 
+        let wasCompleted = task.status == .completed
+
         switch newStatus {
         case .pending:
             if task.isTimerRunning {
@@ -127,6 +157,9 @@ struct TaskService {
             if task.completedAt != nil {
                 task.completedAt = nil
             }
+            if wasCompleted {
+                propagateUncompleteDownward(from: task)
+            }
 
         case .inProgress:
             // 타이머 실행 중에는 inProgress가 이미 유지되므로 도달할 수 없는 분기지만 방어.
@@ -135,6 +168,9 @@ struct TaskService {
                 task.completedAt = nil
             }
             task.status = .inProgress
+            if wasCompleted {
+                propagateUncompleteDownward(from: task)
+            }
 
         case .completed:
             task.status = .completed
@@ -145,6 +181,7 @@ struct TaskService {
             task.isFocused = false
             stopTimer(task, context: context)
             NSSound(named: "Glass")?.play()
+            propagateCompletionDownward(from: task, context: context)
             propagateCompletionUpward(from: task, context: context)
         }
 

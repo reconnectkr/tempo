@@ -133,6 +133,15 @@ open /Applications/Tempo.app
   - FOCUS 없을 땐 `variableLength`로 컨텐츠에 맞춰 자동 축소 — 타이머만 있으면 짧은 라벨, 아무것도 없으면 아이콘 폭만
   - 전환 시점(FOCUS 첫 진입 / 마지막 해제)에만 length 한 번 변경. 그 외엔 동일 폭 유지
 
+#### 완료 상태 자손 전파 (양방향)
+- 부모를 완료 처리하면 모든 미완료 자손도 함께 완료 (`propagateCompletionDownward`). 이미 완료된 자손의 `completedAt`은 보존
+- 부모 완료 해제 시 자손 중 완료된 항목도 함께 pending으로 복귀 (`propagateUncompleteDownward`). 이미 미완료인 자손은 건드리지 않음
+- 두 동작 모두 체크박스·Enter·우클릭 메뉴(`toggleComplete`)와 상세 패널 status picker(`setStatus`) 양쪽에서 일관 동작
+
+#### COMPLETED 영역에서도 드래그앤드롭
+- `CompletedRowView` 폐기, COMPLETED 영역도 **TaskRowView**로 통일 — 드래그앤드롭으로 다른 부모로 옮기거나 형제 순서 변경 가능
+- 우측 타이머 자리에 완료 시각(`HH:mm`) 표시. 메트릭은 다른 섹션 행과 동일
+
 ### 2026-05-07
 
 #### 드래그앤드롭 UX 안정화
