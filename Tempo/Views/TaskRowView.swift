@@ -10,9 +10,29 @@ struct TaskRowView: View {
     let onEdit: () -> Void
     var onDropped: (UUID) -> Void = { _ in }
     var dragState: DragState
+    // true면 FOCUS 영역, false면 QUEUE 영역에서 렌더링됨. QUEUE에서 task.isFocused면 음영 처리.
+    var inFocusSection: Bool = false
+    // 자식 단독 진입(FOCUS/INPROGRESS) 시 들여쓰기를 root 기준으로 정렬하기 위한 override.
+    // nil이면 task.depth 그대로 사용 (QUEUE 일반 행).
+    var depthOverride: Int? = nil
+
+    private var effectiveDepth: Int {
+        depthOverride ?? task.depth
+    }
 
     @State private var now = Date()
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    // 새 4-메인-섹션 구조에선 isFocused 자손이 메인 트리에서 자동 제외되어
+    // 같은 task가 두 곳에 동시 등장하지 않음. 따라서 음영 표시는 더 이상 필요 없음.
+    private var isDimmedInQueue: Bool { false }
+
+    private var checkboxSymbol: String {
+        if task.status == .completed { return "checkmark.circle.fill" }
+        // QUEUE 영역의 음영 항목: 점선 원으로 "지금 FOCUS에 올라가 있음" 시각화.
+        if isDimmedInQueue { return "circle.dotted" }
+        return "circle"
+    }
 
     private var dropState: DropIndicator {
         guard dragState.currentDropTaskId == task.id,
@@ -48,15 +68,18 @@ struct TaskRowView: View {
                 Button(action: {
                     TaskService.toggleComplete(task, context: modelContext)
                 }) {
-                    Image(systemName: task.status == .completed ? "checkmark.circle.fill" : "circle")
+                    Image(systemName: checkboxSymbol)
                         .foregroundStyle(task.status == .completed ? Color.accentColor : Color.secondary)
                         .font(.system(size: 16))
+                        .opacity(isDimmedInQueue ? 0.4 : 1.0)
                 }
                 .buttonStyle(.plain)
 
                 Text(task.title)
                     .strikethrough(task.status == .completed)
                     .foregroundStyle(task.status == .completed ? .secondary : .primary)
+                    .fontWeight(task.status == .inProgress ? .semibold : .regular)
+                    .opacity(isDimmedInQueue ? 0.4 : 1.0)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     // 드래그 제스처는 제목 영역에만 부착(체크박스/타이머 버튼과 충돌 방지).
@@ -87,7 +110,7 @@ struct TaskRowView: View {
 
                 timerSection
             }
-            .padding(.leading, CGFloat(task.depth) * 24)
+            .padding(.leading, CGFloat(effectiveDepth) * 24)
             .padding(.vertical, 6)
             .padding(.horizontal, 12)
             .background(rowBackground)
@@ -143,8 +166,8 @@ struct TaskRowView: View {
 
     private var rowBackground: some View {
         ZStack(alignment: .leading) {
-            // 1. 베이스 색 레이어: drop, selection 등.
-            // 드롭 직후 1.5초 하이라이트는 다른 상태보다 우선해서 사용자가 위치를 추적하도록.
+            // 행 배경은 오직 사용자 인터랙션(선택·드롭·하이라이트) 전용. 진행 중 같은 상태는
+            // 별도 채널(좌측 세로 bar)로 분리해 시각 충돌을 피한다.
             Group {
                 if isRecentlyDropped {
                     Color.yellow.opacity(0.35)
@@ -159,22 +182,25 @@ struct TaskRowView: View {
                 }
             }
 
-            // 2. 진행 중 워터마크: 행 가로 중앙에 흐린 텍스트.
-            if task.status == .inProgress {
-                Text("IN PROGRESS")
-                    .font(.system(size: 18, weight: .heavy, design: .rounded))
-                    .tracking(1.5)
-                    .foregroundStyle(Color.accentColor.opacity(0.45))
-                    .frame(maxWidth: .infinity, alignment: .center)
+            // 좌측 마커: 들여쓰기 밖 행 좌측 엣지의 두꺼운 세로 bar. 배경과 독립 채널이라
+            // 선택 상태와 동시에 표시돼도 의미가 명확히 구분됨.
+            // FOCUS가 우선 — isFocused면 빨강, 그 외 inProgress면 청록.
+            if task.isFocused {
+                Rectangle()
+                    .fill(Color.red)
+                    .frame(width: 5)
+            } else if task.status == .inProgress {
+                Rectangle()
+                    .fill(Color.teal)
+                    .frame(width: 5)
             }
-
         }
     }
 
     // 형제로 떨어질 때: 떨어진 항목의 최종 depth(=target.depth)에 맞춰 들여쓴 라인.
     private var siblingDropLine: some View {
         HStack(spacing: 0) {
-            Spacer().frame(width: CGFloat(task.depth) * 24 + 12)
+            Spacer().frame(width: CGFloat(effectiveDepth) * 24 + 12)
             Rectangle()
                 .fill(Color.accentColor)
                 .frame(height: 3)
@@ -185,7 +211,7 @@ struct TaskRowView: View {
     // 자식으로 떨어질 때: 한 단계 더 들여쓴 ghost line으로 "안으로 들어감"을 시각화.
     private var childDropLine: some View {
         HStack(spacing: 0) {
-            Spacer().frame(width: CGFloat(task.depth + 1) * 24 + 12)
+            Spacer().frame(width: CGFloat(effectiveDepth + 1) * 24 + 12)
             Rectangle()
                 .fill(Color.accentColor.opacity(0.7))
                 .frame(height: 3)

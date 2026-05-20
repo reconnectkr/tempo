@@ -48,6 +48,9 @@ struct TaskService {
         } else {
             task.status = .completed
             task.completedAt = .now
+            // 완료 시 FOCUS 자동 해제 (SPEC 2.4.2). 자손이라도 동일.
+            // 자손 완료가 부모 FOCUS 상태에 영향을 주지는 않음.
+            task.isFocused = false
             stopTimer(task, context: context)
             NSSound(named: "Glass")?.play()
             propagateCompletionUpward(from: task, context: context)
@@ -65,8 +68,87 @@ struct TaskService {
 
         parent.status = .completed
         parent.completedAt = .now
+        parent.isFocused = false
         stopTimer(parent, context: context)
         propagateCompletionUpward(from: parent, context: context)
+    }
+
+    // MARK: - FOCUS
+
+    // FOCUS 토글. 부모 노드면 자기 자신 + 모든 자손이 함께 진입/이탈한다 (SPEC 2.4.2).
+    // 부모가 이미 FOCUS인 상태에서 자식을 또 올리려고 하면, 그 자식은 이미 isFocused=true이므로
+    // setFocusRecursively가 멱등하게 동작 — 자손 전체에 동일한 값을 다시 셋해도 문제 없음.
+    static func toggleFocus(_ task: TodoTask, context: ModelContext) {
+        let newValue = !task.isFocused
+        setFocusRecursively(task, to: newValue, context: context)
+        try? context.save()
+    }
+
+    private static func setFocusRecursively(_ task: TodoTask, to value: Bool, context: ModelContext) {
+        // 완료된 작업은 FOCUS에 올리지 않음. 내리는 건 허용(데이터 일관성).
+        if value, task.status == .completed { return }
+        task.isFocused = value
+        if value {
+            task.focusOrder = nextFocusOrder(context: context)
+            // FOCUS 설정 시 자동으로 진행 중 상태로 함께 전환. 사용자 요청: FOCUS = inProgress + focus 묶음.
+            // 자식 동반 시 자손에도 동일하게 적용됨.
+            task.status = .inProgress
+        }
+        for child in task.children {
+            setFocusRecursively(child, to: value, context: context)
+        }
+    }
+
+    private static func nextFocusOrder(context: ModelContext) -> Int {
+        var descriptor = FetchDescriptor<TodoTask>(
+            predicate: #Predicate<TodoTask> { $0.isFocused == true },
+            sortBy: [SortDescriptor(\.focusOrder, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        let current = (try? context.fetch(descriptor).first?.focusOrder) ?? -1
+        return current + 1
+    }
+
+    // 상태를 직접 지정. 패널의 segmented picker가 호출.
+    // toggleComplete / toggleInProgress 두 토글의 의미를 통합하면서, 부수효과(타이머 정지·
+    // FOCUS 자동 해제·완료 시각 등록·사운드·부모 자동 완료 전파)도 한 곳에서 일관되게 처리한다.
+    static func setStatus(_ task: TodoTask, to newStatus: TaskStatus, context: ModelContext) {
+        guard task.status != newStatus else { return }
+
+        switch newStatus {
+        case .pending:
+            if task.isTimerRunning {
+                // 타이머가 돌고 있으면 pauseTimer가 status=pending 처리까지 수행.
+                pauseTimer(task, context: context)
+            } else {
+                task.status = .pending
+            }
+            // 완료 → 대기 복귀: 완료 시각도 해제 (toggleComplete와 일관).
+            if task.completedAt != nil {
+                task.completedAt = nil
+            }
+
+        case .inProgress:
+            // 타이머 실행 중에는 inProgress가 이미 유지되므로 도달할 수 없는 분기지만 방어.
+            guard !task.isTimerRunning else { return }
+            if task.completedAt != nil {
+                task.completedAt = nil
+            }
+            task.status = .inProgress
+
+        case .completed:
+            task.status = .completed
+            // 패널에서 기존 완료 시각을 보존하며 상태만 토글할 수 있도록, 이미 값이 있으면 유지.
+            if task.completedAt == nil {
+                task.completedAt = .now
+            }
+            task.isFocused = false
+            stopTimer(task, context: context)
+            NSSound(named: "Glass")?.play()
+            propagateCompletionUpward(from: task, context: context)
+        }
+
+        try? context.save()
     }
 
     // 타이머가 돌고 있지 않을 때 진행/대기 상태 토글.

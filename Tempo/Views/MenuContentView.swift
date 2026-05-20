@@ -22,6 +22,10 @@ struct MenuContentView: View {
     @State private var dragStartHeight: CGFloat?
     @State private var dragStartPanelWidth: CGFloat?
     @State private var recentlyDroppedId: UUID?
+    // 각 메인 섹션의 폴드 상태. 기본은 활성 두 섹션 펼침 / 완료는 접힘.
+    @State private var isActiveExpanded = true
+    @State private var isQueueExpanded = true
+    @State private var isCompletedExpanded = false
     // 패널이 열려 있는지 여부. 선택 상태와 분리해 별도로 관리.
     // 항목 선택 → 자동 열림. 선택 해제만으로는 닫히지 않음(삭제 후에도 패널 폭 유지하기 위함).
     // 명시적 닫기는 빈 영역 클릭에서만 발생.
@@ -205,6 +209,11 @@ struct MenuContentView: View {
             case 14 where event.modifierFlags.contains(.command): // Cmd+E → 수정
                 self.editingTaskId = task.id
                 return nil
+            case 3 where event.modifierFlags.contains(.command): // Cmd+F → FOCUS 토글
+                withAnimation {
+                    TaskService.toggleFocus(task, context: self.modelContext)
+                }
+                return nil
             default:
                 return event
             }
@@ -212,11 +221,22 @@ struct MenuContentView: View {
     }
 
     // 위/아래 방향키로 보이는 행 사이에서 선택을 이동. 양 끝에서 순환.
-    // 선택 없을 때 아래키는 첫 항목, 위키는 마지막 항목으로.
+    // 이동 대상은 화면 순서와 일치: 진행 중(FOCUS+inProgress) → QUEUE → COMPLETED.
+    // 폴드된 섹션은 보이지 않으므로 navigation에서도 제외.
     private func moveSelection(by delta: Int) {
-        let items = flattenedTasks
+        var items: [UUID] = []
+        if isActiveExpanded {
+            items.append(contentsOf: flattenedFocusedTasks.map(\.id))
+            items.append(contentsOf: inProgressMainFlattened.map(\.id))
+        }
+        if isQueueExpanded {
+            items.append(contentsOf: queueMainFlattened.map(\.id))
+        }
+        if isCompletedExpanded {
+            items.append(contentsOf: completedTasks.map(\.id))
+        }
         guard !items.isEmpty else { return }
-        applySelection(in: items.map(\.id), delta: delta)
+        applySelection(in: items, delta: delta)
     }
 
     // 좌/우 방향키로 루트(메인) 항목 사이에서만 이동. 양 끝에서 순환.
@@ -391,40 +411,59 @@ struct MenuContentView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(flattenedTasks, id: \.id) { task in
-                        TaskRowView(
-                            task: task,
-                            isSelected: selectedTaskId == task.id,
-                            isRecentlyDropped: recentlyDroppedId == task.id,
-                            onSelect: {
-                                // 행 선택 시 입력창 포커스 해제 → Backspace로 항목 삭제 가능.
-                                isInputFocused = false
-                                // 다른 항목을 선택하면 수정 모드 자동 해제.
-                                if editingTaskId != nil, editingTaskId != task.id {
-                                    editingTaskId = nil
-                                }
-                                if selectedTaskId == task.id {
-                                    selectedTaskId = nil
-                                } else {
-                                    selectedTaskId = task.id
-                                }
-                            },
-                            onEdit: {
-                                selectedTaskId = task.id
-                                editingTaskId = task.id
-                            },
-                            onDropped: { droppedId in
-                                handleDropCompleted(droppedId)
-                            },
-                            dragState: dragState
-                        )
-                        .id(task.id)
-                        .contextMenu {
-                            taskContextMenu(task)
+                    if hasAnyActive {
+                        VStack(spacing: 0) {
+                            sectionHeader(
+                                title: "INPROGRESS",
+                                count: activeTotalCount,
+                                icon: "play.fill",
+                                tint: .teal,
+                                expanded: isActiveExpanded
+                            ) {
+                                withAnimation(.easeInOut(duration: 0.2)) { isActiveExpanded.toggle() }
+                            }
+                            if isActiveExpanded {
+                                activeSectionBody
+                            }
                         }
                     }
 
-                    if flattenedTasks.isEmpty {
+                    if !queueMainFlattened.isEmpty {
+                        VStack(spacing: 0) {
+                            sectionHeader(
+                                title: "QUEUE",
+                                count: queueMainFlattened.count,
+                                icon: "tray",
+                                tint: .secondary,
+                                expanded: isQueueExpanded
+                            ) {
+                                withAnimation(.easeInOut(duration: 0.2)) { isQueueExpanded.toggle() }
+                            }
+                            if isQueueExpanded {
+                                mainSectionRows(queueMainFlattened)
+                            }
+                        }
+                    }
+
+                    if !completedTasks.isEmpty {
+                        VStack(spacing: 0) {
+                            sectionHeader(
+                                title: "COMPLETED",
+                                count: completedTasks.count,
+                                icon: "checkmark.seal",
+                                tint: .blue,
+                                expanded: isCompletedExpanded
+                            ) {
+                                withAnimation(.easeInOut(duration: 0.2)) { isCompletedExpanded.toggle() }
+                            }
+                            if isCompletedExpanded {
+                                completedSectionRows
+                            }
+                        }
+                        .background(Color.blue.opacity(0.05))
+                    }
+
+                    if isAllEmpty {
                         emptyState
                     }
 
@@ -448,8 +487,8 @@ struct MenuContentView: View {
             .onChange(of: scrollTargetId) { _, newValue in
                 guard let id = newValue else { return }
                 // SwiftData @Query 갱신 후 새 행이 LazyVStack에 등장한 다음 스크롤되도록 다음 frame으로 미룸.
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 50_000_000)
+                _Concurrency.Task { @MainActor in
+                    try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
                     withAnimation(.easeInOut(duration: 0.35)) {
                         proxy.scrollTo(id, anchor: .center)
                     }
@@ -457,6 +496,298 @@ struct MenuContentView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 섹션 빌더
+
+    @ViewBuilder
+    private func sectionHeader(
+        title: String,
+        count: Int?,
+        icon: String,
+        tint: Color,
+        expanded: Bool,
+        onToggle: @escaping () -> Void
+    ) -> some View {
+        Button(action: onToggle) {
+            HStack(spacing: 7) {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(tint)
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(tint)
+                Text(title)
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(1.2)
+                    .foregroundStyle(tint)
+                if let count {
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(tint.opacity(0.7))
+                }
+                Rectangle()
+                    .fill(tint.opacity(0.25))
+                    .frame(height: 1)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // INPROGRESS 메인의 내부 본문. FOCUS만 서브헤더로 강조(빨강 배경), 그 외 일반 진행 중 항목은
+    // 메인 헤더(INPROGRESS) 하위라는 게 명확하므로 별도 서브헤더 없이 청록 배경으로만 구분.
+    // 자식 단독으로 inProgress인 경우 FOCUS와 동일하게 부모 경로 라벨로 컨텍스트 보존.
+    @ViewBuilder
+    private var activeSectionBody: some View {
+        if !focusedRoots.isEmpty {
+            VStack(spacing: 0) {
+                queueSubHeader(title: "FOCUS", count: flattenedFocusedTasks.count, tint: .red, icon: "target")
+                focusTreeRows(focusedRoots)
+            }
+            .background(Color.red.opacity(0.14))
+        }
+        if !inProgressRoots.isEmpty {
+            VStack(spacing: 0) {
+                inProgressTreeRows
+            }
+            .background(Color.teal.opacity(0.05))
+        }
+    }
+
+    @ViewBuilder
+    private var inProgressTreeRows: some View {
+        ForEach(inProgressRoots, id: \.id) { root in
+            if root.depth > 0, let path = ancestorPath(of: root) {
+                Text(path)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 12)
+                    .padding(.top, 2)
+            }
+            ForEach(flattenedInProgressTreeWithDepth(root), id: \.0.id) { pair in
+                queueRow(pair.0, depthOverride: pair.1)
+            }
+        }
+    }
+
+    private var hasAnyActive: Bool {
+        !focusedRoots.isEmpty || !inProgressMainFlattened.isEmpty
+    }
+
+    private var activeTotalCount: Int {
+        flattenedFocusedTasks.count + inProgressMainFlattened.count
+    }
+
+    @ViewBuilder
+    private func focusTreeRows(_ roots: [TodoTask]) -> some View {
+        // 같은 부모를 가진 root들을 그룹화 → 부모 경로 라벨이 자식마다 반복되지 않게 한 번만.
+        let groups = groupedRootsByParent(roots)
+        ForEach(groups.indices, id: \.self) { idx in
+            let group = groups[idx]
+            if group.parent != nil, let path = ancestorPath(of: group.roots[0]) {
+                Text(path)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 12)
+                    .padding(.top, 2)
+            }
+            ForEach(group.roots, id: \.id) { root in
+                ForEach(flattenedFocusTreeWithDepth(root), id: \.0.id) { pair in
+                    focusRow(pair.0, depthOverride: pair.1)
+                }
+            }
+        }
+    }
+
+    private struct RootGroup {
+        let parent: TodoTask?
+        var roots: [TodoTask]
+    }
+
+    private func groupedRootsByParent(_ roots: [TodoTask]) -> [RootGroup] {
+        var groups: [RootGroup] = []
+        for root in roots {
+            let parentId = root.parent?.id
+            if let idx = groups.firstIndex(where: { $0.parent?.id == parentId }) {
+                groups[idx].roots.append(root)
+            } else {
+                groups.append(RootGroup(parent: root.parent, roots: [root]))
+            }
+        }
+        return groups
+    }
+
+    // 메인 섹션(진행 중 / QUEUE)의 행 묶음. queueSectionRows의 단순 치환.
+    @ViewBuilder
+    private func mainSectionRows(_ tasks: [TodoTask]) -> some View {
+        ForEach(tasks, id: \.id) { task in
+            queueRow(task)
+        }
+    }
+
+    private func focusRow(_ task: TodoTask, depthOverride: Int? = nil) -> some View {
+        TaskRowView(
+            task: task,
+            isSelected: selectedTaskId == task.id,
+            isRecentlyDropped: recentlyDroppedId == task.id,
+            onSelect: { handleRowTap(task) },
+            onEdit: { handleRowEdit(task) },
+            onDropped: { handleDropCompleted($0) },
+            dragState: dragState,
+            inFocusSection: true,
+            depthOverride: depthOverride
+        )
+        // FOCUS·QUEUE 두 영역에 같은 task가 보일 수 있어 prefix 붙인 별도 identity로 분리.
+        .id("focus-\(task.id.uuidString)")
+        .contextMenu { taskContextMenu(task) }
+    }
+
+    private func queueRow(_ task: TodoTask, depthOverride: Int? = nil) -> some View {
+        TaskRowView(
+            task: task,
+            isSelected: selectedTaskId == task.id,
+            isRecentlyDropped: recentlyDroppedId == task.id,
+            onSelect: { handleRowTap(task) },
+            onEdit: { handleRowEdit(task) },
+            onDropped: { handleDropCompleted($0) },
+            dragState: dragState,
+            inFocusSection: false,
+            depthOverride: depthOverride
+        )
+        .id(task.id)
+        .contextMenu { taskContextMenu(task) }
+    }
+
+    @ViewBuilder
+    private func queueSubHeader(title: String, count: Int, tint: Color = .purple, icon: String? = "play.fill") -> some View {
+        HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(tint)
+            }
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .tracking(0.8)
+                .foregroundStyle(tint)
+            Text("\(count)")
+                .font(.system(size: 10, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(tint.opacity(0.7))
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+    }
+
+    @ViewBuilder
+    private var completedSectionHeader: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isCompletedExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: isCompletedExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(Color.blue)
+                Image(systemName: "checkmark.seal")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.blue)
+                Text("COMPLETED")
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(1.2)
+                    .foregroundStyle(Color.blue)
+                Text("\(completedTasks.count)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.blue.opacity(0.7))
+                Rectangle()
+                    .fill(Color.blue.opacity(0.25))
+                    .frame(height: 1)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var completedSectionRows: some View {
+        // 시각 정순(오래된 게 위)을 보존하기 위해 인접한 같은 부모끼리만 묶음.
+        // 흩어진 케이스(시간상 다른 부모가 끼어든 경우)는 별도 그룹이 되어 부모 라벨이 다시 등장.
+        ForEach(completedGroups.indices, id: \.self) { idx in
+            let group = completedGroups[idx]
+            if group.parent != nil, let first = group.tasks.first, let path = ancestorPath(of: first) {
+                Text(path)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 12)
+                    .padding(.top, 2)
+            }
+            ForEach(group.tasks, id: \.id) { task in
+                CompletedRowView(
+                    task: task,
+                    isSelected: selectedTaskId == task.id,
+                    showParentPath: group.parent == nil,
+                    onSelect: { handleRowTap(task) }
+                )
+                .id("completed-\(task.id.uuidString)")
+                .contextMenu { taskContextMenu(task) }
+            }
+        }
+    }
+
+    private struct CompletedGroup {
+        let parent: TodoTask?
+        var tasks: [TodoTask]
+    }
+
+    private var completedGroups: [CompletedGroup] {
+        var groups: [CompletedGroup] = []
+        for task in completedTasks {
+            let parentId = task.parent?.id
+            if var last = groups.last, last.parent?.id == parentId {
+                last.tasks.append(task)
+                groups[groups.count - 1] = last
+            } else {
+                groups.append(CompletedGroup(parent: task.parent, tasks: [task]))
+            }
+        }
+        return groups
+    }
+
+    private func handleRowTap(_ task: TodoTask) {
+        // 행 선택 시 입력창 포커스 해제 → Backspace로 항목 삭제 가능.
+        isInputFocused = false
+        // 다른 항목을 선택하면 수정 모드 자동 해제.
+        if editingTaskId != nil, editingTaskId != task.id {
+            editingTaskId = nil
+        }
+        if selectedTaskId == task.id {
+            selectedTaskId = nil
+        } else {
+            selectedTaskId = task.id
+        }
+    }
+
+    private func handleRowEdit(_ task: TodoTask) {
+        selectedTaskId = task.id
+        editingTaskId = task.id
     }
 
     @ViewBuilder
@@ -487,6 +818,16 @@ struct MenuContentView: View {
             }
         }
         .keyboardShortcut(.return, modifiers: [])
+
+        // FOCUS 토글. 완료된 항목은 메뉴에서 숨김 (완료 시 자동 해제됨).
+        if task.status != .completed {
+            Button(task.isFocused ? "포커스에서 내리기" : "포커스에 올리기") {
+                withAnimation {
+                    TaskService.toggleFocus(task, context: modelContext)
+                }
+            }
+            .keyboardShortcut("f", modifiers: .command)
+        }
 
         // 타이머 미실행 + 미완료 항목에 대해 수동 진행 토글.
         if task.status != .completed, !task.isTimerRunning {
@@ -601,12 +942,184 @@ struct MenuContentView: View {
         return result
     }
 
-    private func flatten(_ task: TodoTask, into list: inout [TodoTask], allowedIds: Set<UUID>) {
+    private func flatten(_ task: TodoTask, into list: inout [TodoTask], allowedIds: Set<UUID>, skipFocused: Bool = false, skipInProgress: Bool = false) {
         list.append(task)
         // 자식 중 표시 대상에 포함된 것만 재귀(다른 날짜 자식은 숨김).
-        for child in task.sortedChildren where allowedIds.contains(child.id) {
-            flatten(child, into: &list, allowedIds: allowedIds)
+        // skipFocused=true면 isFocused 자손은 빠짐 (FOCUS 섹션에 따로 표시).
+        // skipInProgress=true면 inProgress 자손도 빠짐 (INPROGRESS 섹션에 따로 표시).
+        for child in task.sortedChildren {
+            guard allowedIds.contains(child.id) else { continue }
+            if skipFocused && child.isFocused { continue }
+            if skipInProgress && child.status == .inProgress { continue }
+            flatten(child, into: &list, allowedIds: allowedIds, skipFocused: skipFocused, skipInProgress: skipInProgress)
         }
+    }
+
+    // FOCUS 메인 안에서 다시 두 서브로 나눔: 진행 중 트리 / 대기 트리.
+    private var focusedTreesInProgress: [TodoTask] {
+        focusedRoots.filter { subtreeContainsInProgress($0) }
+    }
+    private var focusedTreesRest: [TodoTask] {
+        focusedRoots.filter { !subtreeContainsInProgress($0) }
+    }
+
+    private var focusedInProgressFlattened: [TodoTask] {
+        flattenedFocusedTasksOf(focusedTreesInProgress)
+    }
+    private var focusedRestFlattened: [TodoTask] {
+        flattenedFocusedTasksOf(focusedTreesRest)
+    }
+
+    private func flattenedFocusedTasksOf(_ roots: [TodoTask]) -> [TodoTask] {
+        var result: [TodoTask] = []
+        for root in roots {
+            appendFocusTree(root, into: &result)
+        }
+        return result
+    }
+
+    // INPROGRESS root: 자기는 inProgress, 부모는 inProgress가 아닌(또는 isFocused) 작업.
+    // FOCUS의 부모-자식 동반 패턴과 달리 inProgress는 자동 동반이 없어 각각의 inProgress 노드가 root가 됨.
+    private var inProgressRoots: [TodoTask] {
+        let ids = relevantTaskIds
+        return allTasks
+            .filter { task in
+                task.status == .inProgress &&
+                !task.isFocused &&
+                ids.contains(task.id) &&
+                // 부모가 inProgress이고 not isFocused이면 그 트리의 일부 — root 아님.
+                !(task.parent.map { $0.status == .inProgress && !$0.isFocused } ?? false)
+            }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private func flattenedInProgressTree(_ root: TodoTask) -> [TodoTask] {
+        var result: [TodoTask] = []
+        appendInProgressTree(root, into: &result)
+        return result
+    }
+
+    private func appendInProgressTree(_ task: TodoTask, into list: inout [TodoTask]) {
+        list.append(task)
+        for child in task.sortedChildren where child.status == .inProgress && !child.isFocused {
+            appendInProgressTree(child, into: &list)
+        }
+    }
+
+    private var inProgressMainFlattened: [TodoTask] {
+        var result: [TodoTask] = []
+        for root in inProgressRoots {
+            appendInProgressTree(root, into: &result)
+        }
+        return result
+    }
+
+    // QUEUE 메인 트리. root 자기 자신만 보고 결정 — !isFocused && !inProgress.
+    // 자식이 isFocused이거나 inProgress여도 부모는 QUEUE에 남고, 그 자손은 평탄화에서 스킵.
+    private var queueMainTrees: [TodoTask] {
+        rootTasks.filter { !$0.isFocused && $0.status != .inProgress }
+    }
+
+    private var queueMainFlattened: [TodoTask] {
+        let ids = relevantTaskIds
+        var result: [TodoTask] = []
+        for task in queueMainTrees {
+            flatten(task, into: &result, allowedIds: ids, skipFocused: true, skipInProgress: true)
+        }
+        return result.filter { $0.status != .completed }
+    }
+
+    // FOCUS 영역의 루트들. isFocused=true이면서 자신의 부모는 isFocused가 아닌 항목.
+    // 부모를 통째로 올린 경우 그 부모가 루트가 되고, 자식만 단독으로 올린 경우엔
+    // 자기 자신(depth > 0)이 루트가 된다.
+    private var focusedRoots: [TodoTask] {
+        let ids = relevantTaskIds
+        return allTasks
+            .filter { task in
+                task.isFocused &&
+                task.status != .completed &&
+                ids.contains(task.id) &&
+                !(task.parent?.isFocused ?? false)
+            }
+            .sorted { $0.focusOrder < $1.focusOrder }
+    }
+
+    // FOCUS 영역 전체를 평탄 리스트로 (방향키 이동·키 모니터용).
+    private var flattenedFocusedTasks: [TodoTask] {
+        var result: [TodoTask] = []
+        for root in focusedRoots {
+            result.append(contentsOf: flattenedFocusTree(root))
+        }
+        return result
+    }
+
+    // 단일 FOCUS 루트로부터 isFocused 자손만 들여쓰기 트리로 평탄화.
+    private func flattenedFocusTree(_ root: TodoTask) -> [TodoTask] {
+        var result: [TodoTask] = []
+        appendFocusTree(root, into: &result)
+        return result
+    }
+
+    private func appendFocusTree(_ task: TodoTask, into list: inout [TodoTask]) {
+        list.append(task)
+        for child in task.sortedChildren where child.isFocused && child.status != .completed {
+            appendFocusTree(child, into: &list)
+        }
+    }
+
+    // root-기준 상대 depth를 함께 반환. 행 들여쓰기를 root=0으로 맞춰 자식 단독 진입한
+    // 항목도 다른 행과 체크박스·텍스트 위치가 정렬됨.
+    private func flattenedFocusTreeWithDepth(_ root: TodoTask) -> [(TodoTask, Int)] {
+        var result: [(TodoTask, Int)] = []
+        appendFocusTreeWithDepth(root, rootDepth: root.depth, into: &result)
+        return result
+    }
+
+    private func appendFocusTreeWithDepth(_ task: TodoTask, rootDepth: Int, into list: inout [(TodoTask, Int)]) {
+        list.append((task, task.depth - rootDepth))
+        for child in task.sortedChildren where child.isFocused && child.status != .completed {
+            appendFocusTreeWithDepth(child, rootDepth: rootDepth, into: &list)
+        }
+    }
+
+    private func flattenedInProgressTreeWithDepth(_ root: TodoTask) -> [(TodoTask, Int)] {
+        var result: [(TodoTask, Int)] = []
+        appendInProgressTreeWithDepth(root, rootDepth: root.depth, into: &result)
+        return result
+    }
+
+    private func appendInProgressTreeWithDepth(_ task: TodoTask, rootDepth: Int, into list: inout [(TodoTask, Int)]) {
+        list.append((task, task.depth - rootDepth))
+        for child in task.sortedChildren where child.status == .inProgress && !child.isFocused {
+            appendInProgressTreeWithDepth(child, rootDepth: rootDepth, into: &list)
+        }
+    }
+
+    // 자식 단독 진입 시 출처 부모 경로. depth=0인 항목엔 라벨 안 붙임.
+    private func ancestorPath(of task: TodoTask) -> String? {
+        var chain: [String] = []
+        var current = task.parent
+        while let node = current {
+            chain.insert(node.title, at: 0)
+            current = node.parent
+        }
+        guard !chain.isEmpty else { return nil }
+        return chain.joined(separator: " > ") + " >"
+    }
+
+    // COMPLETED 영역. 선택일에 완료된 작업들 (완료 시각 정순).
+    private var completedTasks: [TodoTask] {
+        let ids = relevantTaskIds
+        return allTasks
+            .filter { ids.contains($0.id) && $0.status == .completed }
+            .sorted { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) }
+    }
+
+    private var isAllEmpty: Bool {
+        flattenedFocusedTasks.isEmpty &&
+        inProgressMainFlattened.isEmpty &&
+        queueMainFlattened.isEmpty &&
+        completedTasks.isEmpty
     }
 
     // 진행 중(또는 진행 중 후손을 가진 트리)을 같은 레벨에서 위로 올림.
@@ -644,4 +1157,67 @@ private enum ResizeAxis {
     case horizontal
     case vertical
     case both
+}
+
+// COMPLETED 섹션의 행 뷰. 미완료 행과 달리 드래그·타이머·진행 표시가 없고
+// 완료 시각과 부모 경로(있다면)만 노출. 클릭 → 선택, 체크박스 → 미완료 복귀.
+private struct CompletedRowView: View {
+    @Environment(\.modelContext) private var modelContext
+    let task: TodoTask
+    let isSelected: Bool
+    // 그룹 헤더(부모 경로 라벨)가 별도로 그려지는 경우 행 자체엔 경로 생략 — 중복 방지.
+    var showParentPath: Bool = true
+    let onSelect: () -> Void
+
+    var body: some View {
+        // 다른 섹션의 TaskRowView와 메트릭을 맞춤: 체크박스 16pt, vertical 6pt, 우측 텍스트 monospaced 11pt.
+        HStack(spacing: 8) {
+            Button(action: {
+                TaskService.toggleComplete(task, context: modelContext)
+            }) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.accentColor)
+                    .font(.system(size: 16))
+            }
+            .buttonStyle(.plain)
+
+            Text(displayTitle)
+                .strikethrough()
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let completedAt = task.completedAt {
+                Text(timeString(completedAt))
+                    .font(.system(size: 11, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { onSelect() }
+    }
+
+    // 자식 작업이면 부모 경로를 앞에 붙여 컨텍스트 보존: "보고서 작성 > 자료 수집".
+    // 그룹 헤더가 별도로 그려질 땐 showParentPath=false로 와서 task.title만 노출.
+    private var displayTitle: String {
+        guard showParentPath else { return task.title }
+        var chain: [String] = []
+        var current = task.parent
+        while let node = current {
+            chain.insert(node.title, at: 0)
+            current = node.parent
+        }
+        if chain.isEmpty { return task.title }
+        return chain.joined(separator: " > ") + " > " + task.title
+    }
+
+    private func timeString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
 }
