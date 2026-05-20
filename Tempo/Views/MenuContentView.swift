@@ -667,6 +667,25 @@ struct MenuContentView: View {
         .contextMenu { taskContextMenu(task) }
     }
 
+    // COMPLETED 영역의 행. TaskRowView를 그대로 사용해 드래그앤드롭이 자동 적용됨.
+    // 같은 task가 다른 영역에도 보일 가능성은 없지만(status 분기로 배타) 일관성을 위해
+    // id에 "completed-" prefix 부여.
+    private func completedRow(_ task: TodoTask, depthOverride: Int) -> some View {
+        TaskRowView(
+            task: task,
+            isSelected: selectedTaskId == task.id,
+            isRecentlyDropped: recentlyDroppedId == task.id,
+            onSelect: { handleRowTap(task) },
+            onEdit: { handleRowEdit(task) },
+            onDropped: { handleDropCompleted($0) },
+            dragState: dragState,
+            inFocusSection: false,
+            depthOverride: depthOverride
+        )
+        .id("completed-\(task.id.uuidString)")
+        .contextMenu { taskContextMenu(task) }
+    }
+
     @ViewBuilder
     private func queueSubHeader(title: String, count: Int, tint: Color = .purple, icon: String? = "play.fill") -> some View {
         HStack(spacing: 6) {
@@ -747,15 +766,7 @@ struct MenuContentView: View {
             }
 
             ForEach(group.tasks, id: \.id) { task in
-                CompletedRowView(
-                    task: task,
-                    isSelected: selectedTaskId == task.id,
-                    showParentPath: false,
-                    depth: task.depth - baseDepth,
-                    onSelect: { handleRowTap(task) }
-                )
-                .id("completed-\(task.id.uuidString)")
-                .contextMenu { taskContextMenu(task) }
+                completedRow(task, depthOverride: task.depth - baseDepth)
             }
         }
     }

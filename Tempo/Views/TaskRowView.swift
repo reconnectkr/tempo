@@ -221,7 +221,13 @@ struct TaskRowView: View {
 
     @ViewBuilder
     private var timerSection: some View {
-        if task.status != .completed, task.plannedDuration != nil {
+        if task.status == .completed, let completedAt = task.completedAt {
+            // COMPLETED 행에서는 타이머 자리에 완료 시각을 보여줘 동일 메트릭 유지.
+            Text(Self.timeString(completedAt))
+                .font(.system(size: 11, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(.tertiary)
+        } else if task.status != .completed, task.plannedDuration != nil {
             if task.isTimerRunning, let endsAt = task.timerEndsAt {
                 Button(action: {
                     TaskService.pauseTimer(task, context: modelContext)
@@ -256,6 +262,14 @@ struct TaskRowView: View {
                 }
             }
         }
+    }
+}
+
+extension TaskRowView {
+    static func timeString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }
 
