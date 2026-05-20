@@ -16,6 +16,7 @@ struct TaskDetailPanelView: View {
     @State private var createdAt: Date = .now
     @State private var originalDate: Date = .now
     @State private var completedAt: Date = .now
+    @State private var status: TaskStatus = .pending
 
     // 현재 state 버퍼(titleText/memoText/...)에 로드된 task.
     // task 프로퍼티는 부모가 선택을 바꾸는 즉시 새 task로 갈아끼우기 때문에,
@@ -82,6 +83,15 @@ struct TaskDetailPanelView: View {
             guard let target = loadedTask, target.completedAt != nil else { return }
             TaskService.updateCompletedAt(target, date: newValue, context: modelContext)
         }
+        .onChange(of: status) { _, newValue in
+            guard let target = loadedTask, target.status != newValue else { return }
+            TaskService.setStatus(target, to: newValue, context: modelContext)
+            // 상태가 completed로 전환되면 부수효과로 completedAt이 .now로 들어감.
+            // 그 값을 패널 버퍼에도 반영해 DatePicker가 빈 값으로 깜빡이는 일을 막는다.
+            if let updated = target.completedAt {
+                completedAt = updated
+            }
+        }
     }
 
     @ViewBuilder
@@ -91,30 +101,32 @@ struct TaskDetailPanelView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            statusBadge
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
     }
 
     @ViewBuilder
-    private var statusBadge: some View {
-        let (label, color): (String, Color) = {
-            switch task.status {
-            case .pending: return ("대기", .secondary)
-            case .inProgress: return ("진행 중", .accentColor)
-            case .completed: return ("완료", .green)
+    private var statusPicker: some View {
+        // 타이머가 돌고 있으면 status는 타이머 라이프사이클에 종속이라 picker는 비활성.
+        // 사용자가 직접 바꾸려면 행에서 일시정지부터 해야 함.
+        let timerLocked = task.isTimerRunning
+        VStack(alignment: .leading, spacing: 4) {
+            fieldLabel("상태")
+            Picker("", selection: $status) {
+                Text("대기").tag(TaskStatus.pending)
+                Text("진행 중").tag(TaskStatus.inProgress)
+                Text("완료").tag(TaskStatus.completed)
             }
-        }()
-        Text(label)
-            .font(.caption2)
-            .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(color.opacity(0.12))
-            )
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .disabled(timerLocked)
+            if timerLocked {
+                Text("타이머 실행 중에는 상태 변경 불가")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
     }
 
     @ViewBuilder
@@ -137,6 +149,8 @@ struct TaskDetailPanelView: View {
     @ViewBuilder
     private var metaSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            statusPicker
+
             VStack(alignment: .leading, spacing: 4) {
                 fieldLabel("할당 날짜")
                 DatePicker("", selection: $assignedDate, displayedComponents: .date)
@@ -180,13 +194,15 @@ struct TaskDetailPanelView: View {
             if task.daysActive > 1 {
                 metaRow("경과", value: "\(task.daysActive)일째")
             }
-            // 완료일은 완료 상태에서만 노출. 완료 토글은 리스트/단축키에서 수행.
-            if task.completedAt != nil {
-                metaEditableRow("완료일") {
-                    DatePicker("", selection: $completedAt, displayedComponents: [.date, .hourAndMinute])
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                }
+            // 완료일은 항상 노출하되 status에 따라 활성/비활성. 미완료 상태일 때 분기로 숨기면
+            // status picker로 완료 전환해도 @State가 아닌 task 프로퍼티에 의존해 뷰가 갱신되지 않아
+            // 사용자에게 입력란이 즉시 안 보이는 문제가 있음. 항상 노출이 더 안전하고 일관됨.
+            metaEditableRow("완료일") {
+                DatePicker("", selection: $completedAt, displayedComponents: [.date, .hourAndMinute])
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .disabled(status != .completed)
+                    .opacity(status == .completed ? 1.0 : 0.45)
             }
         }
         .padding(.top, 2)
@@ -257,6 +273,7 @@ struct TaskDetailPanelView: View {
         assignedDate = task.assignedDate
         createdAt = task.createdAt
         originalDate = task.originalDate
+        status = task.status
         // completedAt이 nil이면 DatePicker 상태값은 의미 없지만, 일관된 기본값(현재 시각) 유지.
         // 완료 상태가 아닐 때는 onChange 가드에서 무시되므로 안전.
         completedAt = task.completedAt ?? .now

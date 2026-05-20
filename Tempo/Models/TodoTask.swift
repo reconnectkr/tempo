@@ -27,6 +27,11 @@ final class TodoTask {
 
     var needsCarryOverDecision: Bool
 
+    // FOCUS 영역 (SPEC 2.4). isFocused=true면 상단 FOCUS 섹션에 노출되고
+    // QUEUE에서는 음영 표시. 타이머·status와 완전 독립적인 별도 축.
+    var isFocused: Bool = false
+    var focusOrder: Int = 0
+
     var memo: String = ""
 
     @Transient
@@ -50,6 +55,8 @@ final class TodoTask {
         self.plannedDuration = plannedDuration
         self.timerAccumulated = 0
         self.needsCarryOverDecision = false
+        self.isFocused = false
+        self.focusOrder = 0
     }
 
     var daysActive: Int {
