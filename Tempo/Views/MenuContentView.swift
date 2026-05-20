@@ -726,11 +726,17 @@ struct MenuContentView: View {
 
     @ViewBuilder
     private var completedSectionRows: some View {
-        // 시각 정순(오래된 게 위)을 보존하기 위해 인접한 같은 부모끼리만 묶음.
-        // 흩어진 케이스(시간상 다른 부모가 끼어든 경우)는 별도 그룹이 되어 부모 라벨이 다시 등장.
+        // 시각 정순을 유지하면서 인접한 같은 트리 root끼리 묶음.
+        // 그룹 안에 트리 root(parent=nil)도 들어 있으면 부모-자식 트리 형태로 들여쓰기 표시.
+        // root가 그룹에 없으면 출처 부모 경로를 그룹 헤더로 한 번만 노출.
         ForEach(completedGroups.indices, id: \.self) { idx in
             let group = completedGroups[idx]
-            if group.parent != nil, let first = group.tasks.first, let path = ancestorPath(of: first) {
+            let hasRoot = group.tasks.contains { $0.parent == nil }
+            // 그룹 안에서 가장 얕은 depth를 기준으로 들여쓰기 정렬.
+            let baseDepth = group.tasks.map(\.depth).min() ?? 0
+
+            if !hasRoot, let first = group.tasks.first, first.parent != nil,
+               let path = ancestorPath(of: first) {
                 Text(path)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -739,11 +745,13 @@ struct MenuContentView: View {
                     .padding(.leading, 12)
                     .padding(.top, 2)
             }
+
             ForEach(group.tasks, id: \.id) { task in
                 CompletedRowView(
                     task: task,
                     isSelected: selectedTaskId == task.id,
-                    showParentPath: group.parent == nil,
+                    showParentPath: false,
+                    depth: task.depth - baseDepth,
                     onSelect: { handleRowTap(task) }
                 )
                 .id("completed-\(task.id.uuidString)")
@@ -753,22 +761,35 @@ struct MenuContentView: View {
     }
 
     private struct CompletedGroup {
-        let parent: TodoTask?
+        let rootId: UUID
         var tasks: [TodoTask]
     }
 
+    // 같은 트리에 속한 (부모 또는 자손) 항목들이 시간상 인접하면 한 그룹으로 묶음.
+    // 그룹 안 정렬은 depth 오름차순 — 부모가 먼저, 자식이 그 아래로 들여쓰기.
     private var completedGroups: [CompletedGroup] {
         var groups: [CompletedGroup] = []
         for task in completedTasks {
-            let parentId = task.parent?.id
-            if var last = groups.last, last.parent?.id == parentId {
+            let rid = rootIdOf(task)
+            if var last = groups.last, last.rootId == rid {
                 last.tasks.append(task)
                 groups[groups.count - 1] = last
             } else {
-                groups.append(CompletedGroup(parent: task.parent, tasks: [task]))
+                groups.append(CompletedGroup(rootId: rid, tasks: [task]))
             }
         }
+        for i in groups.indices {
+            groups[i].tasks.sort { $0.depth < $1.depth }
+        }
         return groups
+    }
+
+    private func rootIdOf(_ task: TodoTask) -> UUID {
+        var current = task
+        while let parent = current.parent {
+            current = parent
+        }
+        return current.id
     }
 
     private func handleRowTap(_ task: TodoTask) {
@@ -1167,6 +1188,8 @@ private struct CompletedRowView: View {
     let isSelected: Bool
     // 그룹 헤더(부모 경로 라벨)가 별도로 그려지는 경우 행 자체엔 경로 생략 — 중복 방지.
     var showParentPath: Bool = true
+    // 그룹 안 들여쓰기 (root=0, 자식=1, 손자=2). 부모-자식 트리를 시각화.
+    var depth: Int = 0
     let onSelect: () -> Void
 
     var body: some View {
@@ -1194,7 +1217,8 @@ private struct CompletedRowView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.leading, 12 + CGFloat(depth) * 24)
+        .padding(.trailing, 12)
         .padding(.vertical, 6)
         .background(isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
         .contentShape(Rectangle())
