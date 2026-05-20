@@ -21,16 +21,19 @@ final class StatusBarController: NSObject {
         startTimerUpdate()
     }
 
+    // FOCUS 0번째가 노출될 때 사용할 고정 폭. 제목 18자 + " MM:SS" + 여백 수용.
+    private static let focusedLabelWidth: CGFloat = 220
+
     private func setupStatusItem() {
-        // variableLength면 라벨(FOCUS 제목, 타이머 시간)이 바뀔 때마다 메뉴바 폭이 변하고
-        // popover anchor 위치도 함께 흔들려 UX가 불편함. 18자 제목 + " MM:SS" + 여백을
-        // 수용하는 고정 폭으로 안정화. 짧은 컨텐츠일 땐 우측에 여백이 남지만 trade-off 수용.
-        statusItem = NSStatusBar.system.statusItem(withLength: 220)
+        // FOCUS 있을 때는 라벨 내용 변동으로 popover anchor가 흔들리지 않도록
+        // updateTimerDisplay에서 220 고정으로 전환하고, FOCUS 없을 땐 variableLength로
+        // 컨텐츠에 맞춰 자동 축소.
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
             button.image = makeCheckmarkImage()
             button.imagePosition = .imageLeading
-            // 고정 폭이라 짧은 컨텐츠일 때 아이콘 + 텍스트가 좌측에 정렬되도록.
+            // 고정 폭 모드일 때 아이콘+텍스트가 좌측 정렬되도록.
             button.alignment = .left
             button.target = self
             button.action = #selector(handleClick(_:))
@@ -147,10 +150,16 @@ final class StatusBarController: NSObject {
             } else {
                 statusItem.button?.title = " \(title)"
             }
+            // FOCUS 있을 때만 고정 폭. 라벨 내용 변동에도 popover anchor 흔들리지 않음.
+            if statusItem.length != Self.focusedLabelWidth {
+                statusItem.length = Self.focusedLabelWidth
+            }
             return
         }
 
         // FOCUS 없을 때는 기존 동작 — 가장 빠른 타이머 남은 시간.
+        // 폭은 variableLength로 컨텐츠에 맞춰 자동 축소. 타이머만 있으면 짧은 라벨,
+        // 아무것도 없으면 아이콘 크기만.
         let timerDescriptor = FetchDescriptor<TodoTask>(
             predicate: #Predicate<TodoTask> { $0.timerEndsAt != nil },
             sortBy: [SortDescriptor(\.timerEndsAt)]
@@ -163,6 +172,9 @@ final class StatusBarController: NSObject {
             statusItem.button?.title = " \(TimerManager.formatTime(remaining))"
         } else {
             statusItem.button?.title = ""
+        }
+        if statusItem.length != NSStatusItem.variableLength {
+            statusItem.length = NSStatusItem.variableLength
         }
     }
 
