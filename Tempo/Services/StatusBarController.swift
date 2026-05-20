@@ -22,11 +22,16 @@ final class StatusBarController: NSObject {
     }
 
     private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // variableLength면 라벨(FOCUS 제목, 타이머 시간)이 바뀔 때마다 메뉴바 폭이 변하고
+        // popover anchor 위치도 함께 흔들려 UX가 불편함. 18자 제목 + " MM:SS" + 여백을
+        // 수용하는 고정 폭으로 안정화. 짧은 컨텐츠일 땐 우측에 여백이 남지만 trade-off 수용.
+        statusItem = NSStatusBar.system.statusItem(withLength: 220)
 
         if let button = statusItem.button {
             button.image = makeCheckmarkImage()
             button.imagePosition = .imageLeading
+            // 고정 폭이라 짧은 컨텐츠일 때 아이콘 + 텍스트가 좌측에 정렬되도록.
+            button.alignment = .left
             button.target = self
             button.action = #selector(handleClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
