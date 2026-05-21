@@ -23,8 +23,8 @@ struct TaskRowView: View {
     @State private var now = Date()
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    // 새 4-메인-섹션 구조에선 isFocused 자손이 메인 트리에서 자동 제외되어
-    // 같은 task가 두 곳에 동시 등장하지 않음. 따라서 음영 표시는 더 이상 필요 없음.
+    // 새 룰: 부모-자식은 상태가 항상 같이 움직임 — FOCUS·INPROGRESS 부모 밑 자식은 추가 시
+    // 부모 상태를 상속. 같은 task가 두 섹션에 동시 등장하지 않으므로 dim 표시 불필요.
     private var isDimmedInQueue: Bool { false }
 
     private var checkboxSymbol: String {

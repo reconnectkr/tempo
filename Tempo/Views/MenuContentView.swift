@@ -572,7 +572,7 @@ struct MenuContentView: View {
                     .padding(.top, 2)
             }
             ForEach(flattenedInProgressTreeWithDepth(root), id: \.0.id) { pair in
-                queueRow(pair.0, depthOverride: pair.1)
+                inProgressRow(pair.0, depthOverride: pair.1)
             }
         }
     }
@@ -648,6 +648,24 @@ struct MenuContentView: View {
         )
         // FOCUS·QUEUE 두 영역에 같은 task가 보일 수 있어 prefix 붙인 별도 identity로 분리.
         .id("focus-\(task.id.uuidString)")
+        .contextMenu { taskContextMenu(task) }
+    }
+
+    // INPROGRESS 섹션 행. 같은 task가 QUEUE에 컨텍스트로도 노출될 수 있어 별도 identity
+    // prefix로 SwiftUI 뷰 재사용 충돌(상태 누수) 방지.
+    private func inProgressRow(_ task: TodoTask, depthOverride: Int? = nil) -> some View {
+        TaskRowView(
+            task: task,
+            isSelected: selectedTaskId == task.id,
+            isRecentlyDropped: recentlyDroppedId == task.id,
+            onSelect: { handleRowTap(task) },
+            onEdit: { handleRowEdit(task) },
+            onDropped: { handleDropCompleted($0) },
+            dragState: dragState,
+            inFocusSection: true,
+            depthOverride: depthOverride
+        )
+        .id("inprogress-\(task.id.uuidString)")
         .contextMenu { taskContextMenu(task) }
     }
 
@@ -1046,10 +1064,25 @@ struct MenuContentView: View {
         return result
     }
 
-    // QUEUE 메인 트리. root 자기 자신만 보고 결정 — !isFocused && !inProgress.
-    // 자식이 isFocused이거나 inProgress여도 부모는 QUEUE에 남고, 그 자손은 평탄화에서 스킵.
+    // QUEUE 메인 트리.
+    // 1) root 자체가 pending — 일반 QUEUE 항목.
+    // 2) root가 FOCUS/INPROGRESS/COMPLETED인데 pending 자손이 있는 경우 — 부모는 자기 섹션과
+    //    QUEUE 양쪽에 노출(컨텍스트). 자식 추가 시 상속 룰로 정상 흐름은 한 섹션이지만,
+    //    사용자가 자식만 명시적으로 해제·변경한 경우엔 분리 상태가 발생 → 부모 시야 보존.
     private var queueMainTrees: [TodoTask] {
-        rootTasks.filter { !$0.isFocused && $0.status != .inProgress }
+        rootTasks.filter { root in
+            if !root.isFocused && root.status == .pending { return true }
+            return hasPendingNonFocusedDescendant(root)
+        }
+    }
+
+    // QUEUE 노출 대상 자손(pending && !isFocused) 보유 여부.
+    private func hasPendingNonFocusedDescendant(_ task: TodoTask) -> Bool {
+        for child in task.children where !child.isFocused && child.status != .completed {
+            if child.status == .pending { return true }
+            if hasPendingNonFocusedDescendant(child) { return true }
+        }
+        return false
     }
 
     private var queueMainFlattened: [TodoTask] {
@@ -1058,7 +1091,11 @@ struct MenuContentView: View {
         for task in queueMainTrees {
             flatten(task, into: &result, allowedIds: ids, skipFocused: true, skipInProgress: true)
         }
-        return result.filter { $0.status != .completed }
+        // completed 항목은 일반적으로 QUEUE 비대상이지만, pending 자손을 가진 completed 부모는
+        // 자식 시야 보존을 위해 컨텍스트로 노출. strikethrough가 이미 적용돼 시각 구분은 유지됨.
+        return result.filter { task in
+            task.status != .completed || hasPendingNonFocusedDescendant(task)
+        }
     }
 
     // FOCUS 영역의 루트들. isFocused=true이면서 자신의 부모는 isFocused가 아닌 항목.
