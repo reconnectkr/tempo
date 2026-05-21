@@ -35,8 +35,52 @@ struct TaskService {
             plannedDuration: plannedDuration
         )
         context.insert(task)
+
+        // 부모-자식 한 섹션 룰. 부모가 FOCUS/INPROGRESS/COMPLETED면 새 자식도 같은 상태로
+        // 끌어올림. 사용자가 "queue에서 focus로 부모가 올라가면 자식들도 다 올라가잖아.
+        // 그거랑 같은 룰" 이라고 명시한 룰의 추가/드롭 시점 확장.
+        if let parent {
+            inheritParentStateRecursively(from: parent, to: task, context: context)
+        }
         try? context.save()
         return task
+    }
+
+    // 부모 상태를 task(및 자손)에 상속.
+    // - parent.isFocused → setFocusRecursively로 FOCUS+inProgress+focusOrder 묶음 처리.
+    // - parent.status == .inProgress → 자식이 FOCUS/inProgress가 아닐 때만 inProgress로 끌어올림.
+    //   자식이 더 활성 상태(FOCUS)면 그대로 둠.
+    // - parent.status == .completed → 자손까지 모두 completed로 강제 (propagateCompletionDownward 일관).
+    // - parent.status == .pending → 자식 상태 손대지 않음 (자식이 더 활성일 수 있음).
+    static func inheritParentStateRecursively(from parent: TodoTask, to task: TodoTask, context: ModelContext) {
+        if parent.isFocused {
+            setFocusRecursively(task, to: true, context: context)
+            return
+        }
+        switch parent.status {
+        case .inProgress:
+            if !task.isFocused && task.status != .inProgress {
+                task.status = .inProgress
+            }
+            for child in task.children {
+                inheritParentStateRecursively(from: parent, to: child, context: context)
+            }
+        case .completed:
+            task.status = .completed
+            // 부모의 completedAt을 상속. COMPLETED 섹션 정렬은 completedAt 정순이라
+            // .now로 잡으면 부모와 시간상 떨어져 다른 root 그룹과 섞여 보임 — "다른 부모 자식"으로
+            // 오인되는 시각 버그의 원인. 부모 값을 그대로 받아 같은 그룹에 인접 배치.
+            if task.completedAt == nil {
+                task.completedAt = parent.completedAt ?? .now
+            }
+            task.isFocused = false
+            stopTimer(task, context: context)
+            for child in task.children {
+                inheritParentStateRecursively(from: parent, to: child, context: context)
+            }
+        case .pending:
+            break
+        }
     }
 
     // MARK: - 완료
@@ -47,6 +91,8 @@ struct TaskService {
             task.completedAt = nil
             // 완료 해제 시 자손도 함께 해제 (사용자 요청). 완료 진입 때와 대칭.
             propagateUncompleteDownward(from: task)
+            // 부모도 자동 해제 — "부모 완료 = 모든 자식 완료" invariant. 형제는 그대로.
+            propagateUncompleteUpward(from: task)
         } else {
             task.status = .completed
             task.completedAt = .now
@@ -84,6 +130,16 @@ struct TaskService {
             child.completedAt = nil
             propagateUncompleteDownward(from: child)
         }
+    }
+
+    // 자손 → 부모 방향 완료 해제. "부모 완료 = 모든 자식 완료" invariant 유지.
+    // 자식 하나라도 미완료가 되면 부모도 자동 해제. propagateCompletionUpward의 대칭.
+    // 다른 형제(completed sibling)는 그대로 둠 — "자식 하나만 완료된 상태"가 됨.
+    private static func propagateUncompleteUpward(from task: TodoTask) {
+        guard let parent = task.parent, parent.status == .completed else { return }
+        parent.status = .pending
+        parent.completedAt = nil
+        propagateUncompleteUpward(from: parent)
     }
 
     // 하위 항목이 모두 완료되면 부모도 자동 완료. 루트까지 재귀 전파.
@@ -159,6 +215,7 @@ struct TaskService {
             }
             if wasCompleted {
                 propagateUncompleteDownward(from: task)
+                propagateUncompleteUpward(from: task)
             }
 
         case .inProgress:
@@ -170,6 +227,7 @@ struct TaskService {
             task.status = .inProgress
             if wasCompleted {
                 propagateUncompleteDownward(from: task)
+                propagateUncompleteUpward(from: task)
             }
 
         case .completed:
@@ -474,6 +532,14 @@ struct TaskService {
         source.parent = newParent
         source.sortOrder = newSortOrder
         recalculateDepth(source)
+
+        // .child 드롭은 자식 추가와 동일 — 부모 상태(FOCUS/INPROGRESS/COMPLETED)를 source
+        // 트리에 상속해 "부모는 한 섹션, 자식은 다른 섹션" 분리 노출을 막음.
+        // siblingAbove/Below는 새 부모도 동일하므로 별도 적용. parent가 nil이면(root로 이동)
+        // 상속할 부모가 없으므로 source 상태 그대로 유지.
+        if let newParent {
+            inheritParentStateRecursively(from: newParent, to: source, context: context)
+        }
 
         try? context.save()
     }

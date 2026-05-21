@@ -9,6 +9,7 @@ macOS 메뉴바에 상주하는 TODO 앱. 클릭 한 번으로 오늘 할 일을
   - [빌드 및 설치](#빌드-및-설치)
   - [업데이트](#업데이트)
 - [업데이트 내용](#업데이트-내용)
+  - [2026-05-21](#2026-05-21)
   - [2026-05-20](#2026-05-20)
   - [2026-05-07](#2026-05-07)
 - [사용법](#사용법)
@@ -69,6 +70,29 @@ open /Applications/Tempo.app
 ```
 
 ## 업데이트 내용
+
+### 2026-05-21
+
+#### 부모-자식 한 섹션 룰
+- INPROGRESS/COMPLETED 부모 밑에 자식을 추가하면 자식이 어디에도 보이지 않던 버그 수정 — `queueMainTrees`가 root 단위로 통째 필터링해서 부모가 비-pending이면 트리 전체가 QUEUE에서 사라지던 게 원인
+- 자식 생성·드롭 시 부모 상태를 자동 상속하는 `TaskService.inheritParentStateRecursively` 도입
+  - 부모 FOCUS → 자식도 FOCUS (status `.inProgress` + `focusOrder` 부여, 자손까지 재귀)
+  - 부모 INPROGRESS → 자식이 FOCUS·inProgress가 아닐 때만 inProgress로 끌어올림 (자식이 더 활성이면 유지)
+  - 부모 COMPLETED → 자손까지 모두 completed로 강제, `completedAt`은 부모 값 상속 (자식 `.now`로 잡으면 정렬상 떨어져 다른 root 그룹과 섞여 보이던 시각 버그 해소)
+  - 부모 pending → 자식 상태에 손대지 않음
+- 진입점 두 곳에서 호출: `TaskService.createTask` (직접 입력으로 자식 추가) / `TaskService.performDrop` `.child` 모드 (드래그앤드롭으로 자식화)
+
+#### 자손 → 부모 완료 해제 전파
+- 자식 하나라도 완료를 해제하면 부모도 자동 해제 (`propagateUncompleteUpward`) — `propagateCompletionUpward`의 대칭
+- "부모 완료 = 모든 자식 완료" invariant 유지. 자식 하나만 완료된 상태가 되면 부모는 미완료가 자연스러움
+- 다른 형제(completed sibling)는 그대로 유지 — 사용자가 명시적으로 완료한 작업까지 풀어버리지는 않음
+- `toggleComplete`와 `setStatus`의 `.pending`/`.inProgress` 분기 모두에서 호출 (체크박스·Enter·우클릭 메뉴·상세 패널 picker 일관)
+
+#### 부모 시야 양쪽 노출
+- FOCUS/INPROGRESS 부모가 pending 자손을 가진 경우, 부모는 자기 섹션과 QUEUE 양쪽에 등장 — 자식 컨텍스트 보존
+- `queueMainTrees` 조건 완화: `!isFocused && pending`이거나 `hasPendingNonFocusedDescendant`인 root는 모두 QUEUE에 포함
+- 같은 task가 두 섹션에 동시 노출될 수 있는 INPROGRESS 케이스 대비, `MenuContentView.inProgressRow` 분리 (`"inprogress-{uuid}"` prefix로 SwiftUI identity 충돌 방지)
+- COMPLETED는 자식 해제 시 부모도 함께 해제되므로 양쪽 노출 케이스가 자연 발생하지 않음
 
 ### 2026-05-20
 
