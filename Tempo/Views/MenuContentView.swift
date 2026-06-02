@@ -589,9 +589,8 @@ struct MenuContentView: View {
     private func focusTreeRows(_ roots: [TodoTask]) -> some View {
         // 같은 부모를 가진 root들을 그룹화 → 부모 경로 라벨이 자식마다 반복되지 않게 한 번만.
         let groups = groupedRootsByParent(roots)
-        ForEach(groups.indices, id: \.self) { idx in
-            let group = groups[idx]
-            if group.parent != nil, let path = ancestorPath(of: group.roots[0]) {
+        ForEach(groups) { group in
+            if group.parent != nil, let firstRoot = group.roots.first, let path = ancestorPath(of: firstRoot) {
                 Text(path)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -608,9 +607,11 @@ struct MenuContentView: View {
         }
     }
 
-    private struct RootGroup {
+    private struct RootGroup: Identifiable {
         let parent: TodoTask?
         var roots: [TodoTask]
+        // 그룹의 첫 root id를 안정적인 식별자로 사용 (각 항목 id는 고유).
+        var id: UUID { roots.first?.id ?? UUID() }
     }
 
     private func groupedRootsByParent(_ roots: [TodoTask]) -> [RootGroup] {
@@ -766,8 +767,7 @@ struct MenuContentView: View {
         // 시각 정순을 유지하면서 인접한 같은 트리 root끼리 묶음.
         // 그룹 안에 트리 root(parent=nil)도 들어 있으면 부모-자식 트리 형태로 들여쓰기 표시.
         // root가 그룹에 없으면 출처 부모 경로를 그룹 헤더로 한 번만 노출.
-        ForEach(completedGroups.indices, id: \.self) { idx in
-            let group = completedGroups[idx]
+        ForEach(completedGroups) { group in
             let hasRoot = group.tasks.contains { $0.parent == nil }
             // 그룹 안에서 가장 얕은 depth를 기준으로 들여쓰기 정렬.
             let baseDepth = group.tasks.map(\.depth).min() ?? 0
@@ -789,9 +789,11 @@ struct MenuContentView: View {
         }
     }
 
-    private struct CompletedGroup {
+    private struct CompletedGroup: Identifiable {
         let rootId: UUID
         var tasks: [TodoTask]
+        // 그룹의 첫 항목 id를 안정적인 식별자로 사용 (각 항목 id는 고유).
+        var id: UUID { tasks.first?.id ?? rootId }
     }
 
     // 같은 트리에 속한 (부모 또는 자손) 항목들이 시간상 인접하면 한 그룹으로 묶음.
